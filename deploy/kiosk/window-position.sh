@@ -90,6 +90,44 @@ captureos_position_window_class() {
     return 0
 }
 
+# True when the window's center sits inside the target rectangle.
+captureos_window_on_target() {
+    local wid="$1" tx="$2" ty="$3" tw="$4" th="$5"
+    local X="" Y="" WIDTH="" HEIGHT="" SCREEN=""
+    eval "$(xdotool getwindowgeometry --shell "$wid" 2>/dev/null)" || return 1
+    [[ -n "$X" && -n "$Y" ]] || return 1
+    local cx=$((X + ${WIDTH:-0} / 2)) cy=$((Y + ${HEIGHT:-0} / 2))
+    (( cx >= tx && cx < tx + tw && cy >= ty && cy < ty + th ))
+}
+
+# Keep checking (and re-placing) a kiosk window until it really sits on
+# its target display. At boot Chromium often starts before the second
+# monitor is arranged, so a single positioning pass lands both windows
+# on one screen; this loop catches up once the layout settles.
+captureos_ensure_window_layout() {
+    local class="$1" x="$2" y="$3" w="$4" h="$5" tries="${6:-8}"
+    local i wid
+    command -v xdotool >/dev/null 2>&1 || return 1
+
+    for i in $(seq 1 "$tries"); do
+        wid="$(captureos_find_window_by_class "$class" || true)"
+        if [[ -n "$wid" ]]; then
+            if captureos_window_on_target "$wid" "$x" "$y" "$w" "$h"; then
+                echo "CaptureOS: ${class} verified at ${x},${y} (attempt ${i})"
+                return 0
+            fi
+            captureos_position_window_class "$class" "$x" "$y" "$w" "$h" || true
+            if captureos_window_on_target "$wid" "$x" "$y" "$w" "$h"; then
+                echo "CaptureOS: ${class} moved to ${x},${y} (attempt ${i})"
+                return 0
+            fi
+        fi
+        sleep 2
+    done
+    echo "CaptureOS: ${class} still not at ${x},${y} after ${tries} attempts" >&2
+    return 1
+}
+
 captureos_arrange_extended_desktop() {
     # If two monitors share the same origin they are mirrored — extend them.
     captureos_collect_xrandr_displays || return 0

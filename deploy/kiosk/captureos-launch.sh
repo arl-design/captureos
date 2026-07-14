@@ -318,7 +318,53 @@ echo "booth kiosk launched"
 
 sleep 2
 
-if declare -F captureos_position_window_class >/dev/null 2>&1; then
+# Verify-and-retry placement: at boot Chromium starts before the second
+# monitor is fully arranged, so windows pile onto one screen. Keep
+# checking where each window actually is and re-place until correct
+# (a manual relaunch verifies on the first pass and exits immediately).
+booth_placed=1
+gallery_placed=1
+if declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
+    if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+        captureos_ensure_window_layout CaptureOS-Gallery \
+            "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
+            "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" 8 9>&- &
+        GALLERY_POS_PID=$!
+    fi
+    captureos_ensure_window_layout CaptureOS-Booth \
+        "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" 8 9>&- &
+    BOOTH_POS_PID=$!
+    wait "$BOOTH_POS_PID" || booth_placed=0
+    if [[ -n "${GALLERY_POS_PID:-}" ]]; then
+        wait "$GALLERY_POS_PID" || gallery_placed=0
+    fi
+
+    # Last resort: the layout may have settled differently since launch,
+    # or only one display had been detected (booth == gallery output) —
+    # re-resolve the (possibly new) geometry and place once more.
+    if { (( booth_placed == 0 || gallery_placed == 0 )) \
+        || [[ "${CAPTUREOS_BOOTH_OUTPUT:-a}" == "${CAPTUREOS_GALLERY_OUTPUT:-b}" ]]; } \
+        && declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
+        echo "re-resolving display layout for a final placement pass"
+        if declare -F captureos_wait_for_displays >/dev/null 2>&1; then
+            captureos_wait_for_displays 2 20 || true
+        fi
+        if declare -F captureos_setup_wayland_displays >/dev/null 2>&1 \
+            && captureos_is_wayland_session 2>/dev/null; then
+            captureos_setup_wayland_displays || true
+        fi
+        captureos_resolve_display_layout || true
+        if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+            captureos_ensure_window_layout CaptureOS-Gallery \
+                "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
+                "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" 3 || true
+        fi
+        captureos_ensure_window_layout CaptureOS-Booth \
+            "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+            "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" 3 || true
+    fi
+elif declare -F captureos_position_window_class >/dev/null 2>&1; then
     if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
         captureos_position_window_class CaptureOS-Gallery \
             "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
