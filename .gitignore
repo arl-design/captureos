@@ -1,0 +1,14 @@
+# Runtime state (photos, thumbnails, SQLite DB, logs, backups)
+data/
+
+# Dependencies & build output
+node_modules/
+frontend/dist/
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor / OS
+.DS_Store
+*.swp

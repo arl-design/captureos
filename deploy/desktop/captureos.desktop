@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=CaptureOS Photo Booth
+Comment=Start the LEGO MiniFigure Photo Booth
+Exec=/opt/captureos/captureos-launch.sh
+Icon=/opt/captureos/captureos-icon.png
+Terminal=false
+Categories=AudioVideo;Photography;
+StartupNotify=false

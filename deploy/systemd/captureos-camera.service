@@ -1,0 +1,23 @@
+[Unit]
+Description=CaptureOS camera service
+After=network.target
+
+[Service]
+Type=simple
+User=captureos
+Group=captureos
+SupplementaryGroups=video
+WorkingDirectory=/opt/captureos/camera-service
+Environment=CAPTUREOS_DATA=/opt/captureos/data
+ExecStart=/usr/bin/python3 camera_service.py
+Restart=always
+RestartSec=2
+
+# Reliability & security hardening (hardening: read-only app assets)
+ProtectSystem=strict
+ReadWritePaths=/opt/captureos/data
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

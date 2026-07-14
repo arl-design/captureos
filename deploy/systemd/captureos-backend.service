@@ -1,0 +1,24 @@
+[Unit]
+Description=CaptureOS backend API
+After=network.target captureos-camera.service
+Wants=captureos-camera.service
+
+[Service]
+Type=simple
+User=captureos
+Group=captureos
+WorkingDirectory=/opt/captureos/backend
+Environment=CAPTUREOS_DATA=/opt/captureos/data
+Environment=CAMERA_SERVICE_URL=http://127.0.0.1:5000
+Environment=PORT=3000
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=2
+
+ProtectSystem=strict
+ReadWritePaths=/opt/captureos/data
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
