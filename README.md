@@ -74,6 +74,17 @@ touchscreen; set `TOUCH_WIDTH` if yours isn't 1024 px wide, or
 `CAPTUREOS_GALLERY=0` to skip it). The same entry runs at boot via
 `~/.config/autostart`.
 
+The installer surfaces three ways to launch, so you always have one:
+
+- the **CaptureOS Photo Booth** icon on the Desktop,
+- the **CaptureOS Photo Booth** entry in the application menu, and
+- the `captureos` command in a terminal.
+
+The first time you use the Desktop icon, some desktops ask you to trust the
+launcher — allow it once (or right-click → *Allow Launching*). The installer
+marks it trusted automatically where it can, but if the icon doesn't appear,
+use the app-menu entry or run `captureos`.
+
 ## Quick start (development, no Pi required)
 
 The camera service detects missing camera hardware and switches to a

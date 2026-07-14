@@ -59,19 +59,46 @@ install -m 644 "$REPO_DIR/deploy/desktop/captureos-icon.png" "$APP_DIR/captureos
 install -m 644 "$REPO_DIR/deploy/desktop/captureos.desktop" \
     /usr/share/applications/captureos.desktop
 
+# A terminal command that always works, even if a Desktop icon doesn't show
+# (headless/Lite, renamed Desktop folder, or a file manager that refuses
+# untrusted launchers). Users can just run `captureos`.
+ln -sf "$APP_DIR/captureos-launch.sh" /usr/local/bin/captureos
+
+# Refresh the application menu so "CaptureOS Photo Booth" appears there.
+command -v update-desktop-database >/dev/null 2>&1 \
+    && update-desktop-database /usr/share/applications 2>/dev/null || true
+
 # Give the invoking user a double-tap Desktop icon and boot autostart.
 KIOSK_USER="${SUDO_USER:-}"
 if [[ -n "$KIOSK_USER" ]]; then
     KIOSK_HOME="$(getent passwd "$KIOSK_USER" | cut -d: -f6)"
     if [[ -d "$KIOSK_HOME" ]]; then
+        # Desktop folder can be localised (XDG_DESKTOP_DIR); resolve it as the
+        # kiosk user so $HOME expands correctly, falling back to ~/Desktop,
+        # which the installer creates if missing.
+        DESKTOP_DIR="$(sudo -u "$KIOSK_USER" sh -c \
+            '. "$HOME/.config/user-dirs.dirs" 2>/dev/null; \
+             printf %s "${XDG_DESKTOP_DIR:-$HOME/Desktop}"')"
+        [[ -n "$DESKTOP_DIR" ]] || DESKTOP_DIR="$KIOSK_HOME/Desktop"
+
         install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 755 -d \
-            "$KIOSK_HOME/Desktop" "$KIOSK_HOME/.config/autostart"
+            "$DESKTOP_DIR" "$KIOSK_HOME/.config/autostart"
         install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 755 \
             "$REPO_DIR/deploy/desktop/captureos.desktop" \
-            "$KIOSK_HOME/Desktop/captureos.desktop"
+            "$DESKTOP_DIR/captureos.desktop"
         install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
             "$REPO_DIR/deploy/desktop/captureos.desktop" \
             "$KIOSK_HOME/.config/autostart/captureos.desktop"
+
+        # Modern desktops (GNOME/Nautilus, PCManFM) ignore .desktop launchers
+        # on the Desktop unless they're marked trusted. Do it as the user so
+        # the icon is clickable without a security prompt.
+        sudo -u "$KIOSK_USER" gio set "$DESKTOP_DIR/captureos.desktop" \
+            metadata::trusted true 2>/dev/null || true
+        # PCManFM (Raspberry Pi OS) reads an executable bit + this key.
+        sudo -u "$KIOSK_USER" gio set "$DESKTOP_DIR/captureos.desktop" \
+            metadata::xfce-exe-checksum "$(sha256sum \
+            "$DESKTOP_DIR/captureos.desktop" | cut -d' ' -f1)" 2>/dev/null || true
     fi
 fi
 
@@ -93,5 +120,11 @@ echo "  Booth UI:   http://localhost/#/"
 echo "  Gallery:    http://localhost/#/gallery"
 echo "  API health: http://localhost/api/health"
 echo
-echo "Tap the 'CaptureOS Photo Booth' icon on the Desktop to launch the"
-echo "kiosk (it also autostarts on boot via ~/.config/autostart)."
+echo "To launch the kiosk, use any of:"
+echo "  * the 'CaptureOS Photo Booth' icon on the Desktop"
+echo "  * the 'CaptureOS Photo Booth' entry in the application menu"
+echo "  * the 'captureos' command in a terminal"
+echo "It also autostarts on boot via ~/.config/autostart."
+echo
+echo "If a fresh Desktop icon shows a 'don't trust' prompt the first time,"
+echo "allow it once (or right-click -> 'Allow Launching')."
