@@ -54,12 +54,16 @@ captureos_apply_labwc_touch() {
     local rc="${XDG_CONFIG_HOME:-$HOME/.config}/labwc/rc.xml"
     mkdir -p "$(dirname "$rc")"
 
-    python3 - "$rc" "$device" "$output" <<'PY'
+    # Multitouch (mouseEmulation=no) is the mode that works with the
+    # dual-screen kiosk; override with CAPTUREOS_TOUCH_MOUSE_EMULATION=yes.
+    local emulation="${CAPTUREOS_TOUCH_MOUSE_EMULATION:-no}"
+
+    python3 - "$rc" "$device" "$output" "$emulation" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-rc_path, device, map_output = sys.argv[1:4]
+rc_path, device, map_output, emulation = sys.argv[1:5]
 path = Path(rc_path)
 ns = "{http://openbox.org/3.4/rc}"
 # Keep <touch .../> instead of <ns0:touch .../> — labwc reads plain names.
@@ -89,25 +93,22 @@ for touch in list(root):
             root.remove(touch)  # duplicate entry
             changed = True
 
-if existing is not None:
-    # Only correct the output mapping. Everything else (multitouch vs
-    # mouse emulation etc.) is the user's Screen Configuration choice —
-    # never override it, that caused "settings reset every reboot".
-    if attr(existing, "mapToOutput") != map_output:
-        existing.set("mapToOutput", map_output)
-        changed = True
-else:
-    touch = ET.SubElement(root, f"{ns}touch")
-    touch.set("deviceName", device)
-    touch.set("mapToOutput", map_output)
-    # Multitouch (no mouse emulation) — matches the Screen Configuration
-    # setting that works with the CaptureOS dual-screen kiosk.
-    touch.set("mouseEmulation", "no")
+if existing is None:
+    existing = ET.SubElement(root, f"{ns}touch")
+    existing.set("deviceName", device)
+    changed = True
+
+if attr(existing, "mapToOutput") != map_output:
+    existing.set("mapToOutput", map_output)
+    changed = True
+if attr(existing, "mouseEmulation") != emulation:
+    # Also corrects entries an older CaptureOS wrote with emulation on.
+    existing.set("mouseEmulation", emulation)
     changed = True
 
 if changed:
     tree.write(path, encoding="unicode", xml_declaration=True)
-    print(f"CaptureOS: labwc touch '{device}' -> {map_output} ({path})")
+    print(f"CaptureOS: labwc touch '{device}' -> {map_output} (mouseEmulation={emulation})")
 else:
     print(f"CaptureOS: labwc touch '{device}' already -> {map_output}")
 sys.exit(0 if changed else 3)

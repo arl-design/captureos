@@ -20,6 +20,10 @@
 # CAPTUREOS_TOUCH_DEVICE_ID=8
 # CAPTUREOS_TOUCH_LIBINPUT="10-0038 generic ft5x06 (79)"  # libinput name (Wayland)
 #
+# Touchscreen mode enforced at boot: multitouch (no) works with the
+# dual-screen kiosk. Set to yes only if you need mouse emulation:
+# CAPTUREOS_TOUCH_MOUSE_EMULATION=no
+#
 # Set to 0 to leave Pi OS kanshi / labwc touch config untouched:
 # CAPTUREOS_MANAGE_KANSHI=1
 # CAPTUREOS_MANAGE_LABWC_TOUCH=1
