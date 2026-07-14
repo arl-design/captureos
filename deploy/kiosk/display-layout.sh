@@ -112,14 +112,15 @@ captureos_auto_assign_displays() {
 }
 
 captureos_apply_display_entry() {
-    local prefix="$1" entry name w h x y primary
+    local prefix="$1" entry name w h x y primary rate
     entry="$2"
-    IFS='|' read -r name w h x y primary <<<"$entry"
+    IFS='|' read -r name w h x y primary rate <<<"$entry"
     printf -v "CAPTUREOS_${prefix}_OUTPUT" '%s' "$name"
     printf -v "CAPTUREOS_${prefix}_X" '%s' "$x"
     printf -v "CAPTUREOS_${prefix}_Y" '%s' "$y"
     printf -v "CAPTUREOS_${prefix}_W" '%s' "$w"
     printf -v "CAPTUREOS_${prefix}_H" '%s' "$h"
+    printf -v "CAPTUREOS_${prefix}_RATE" '%s' "${rate:-60}"
 }
 
 # Sets CAPTUREOS_BOOTH_{X,Y,W,H,OUTPUT} and CAPTUREOS_GALLERY_{X,Y,W,H,OUTPUT}.

@@ -31,41 +31,49 @@ captureos_to_xrandr_output() {
     esac
 }
 
-# Parse wlr-randr -- output lines like:
-#   HDMI-A-1 "Monitor Name" 1920x1080@60Hz
-#     Position: 0,0
+# Parse real wlr-randr output. The current mode is NOT on the header line:
+#   HDMI-A-1 "Dell Inc. DELL S2721QS (HDMI-A-1)"
 #     Enabled: yes
+#     Modes:
+#       1920x1080 px, 60.000000 Hz (preferred, current)
+#     Position: 0,0
+#     Transform: normal
 captureos_collect_wlr_displays() {
     CAPTUREOS_DISPLAY_LINES=()
     command -v wlr-randr >/dev/null 2>&1 || return 1
 
-    local name="" w="" h="" x=0 y=0 primary=0 enabled=1 rate=60
+    local name="" w="" h="" x=0 y=0 enabled=1 rate=60
     local line
     while IFS= read -r line; do
-        if [[ "$line" =~ ^([A-Za-z0-9-]+)[[:space:]]+\".*\"[[:space:]]+([0-9]+)x([0-9]+)(@([0-9.]+)Hz)? ]]; then
+        # Header: output name at column 0 followed by the quoted description.
+        if [[ "$line" =~ ^([A-Za-z0-9][A-Za-z0-9-]*)[[:space:]]+\" ]]; then
             if [[ -n "$name" && -n "$w" && -n "$h" && "$enabled" == "1" ]]; then
-                CAPTUREOS_DISPLAY_LINES+=("${name}|${w}|${h}|${x}|${y}|${primary}|${rate}")
+                CAPTUREOS_DISPLAY_LINES+=("${name}|${w}|${h}|${x}|${y}|0|${rate}")
             fi
             name="${BASH_REMATCH[1]}"
-            w="${BASH_REMATCH[2]}"
-            h="${BASH_REMATCH[3]}"
-            rate="${BASH_REMATCH[5]:-60}"
+            w=""
+            h=""
             x=0
             y=0
             enabled=1
+            rate=60
             continue
         fi
         [[ -n "$name" ]] || continue
-        if [[ "$line" =~ Position:[[:space:]]*([0-9]+),([0-9]+) ]]; then
+        if [[ "$line" =~ Enabled:[[:space:]]*(yes|no) ]]; then
+            [[ "${BASH_REMATCH[1]}" == "yes" ]] && enabled=1 || enabled=0
+        elif [[ "$line" =~ ([0-9]+)x([0-9]+)[[:space:]]*px,[[:space:]]*([0-9.]+)[[:space:]]*Hz.*current ]]; then
+            w="${BASH_REMATCH[1]}"
+            h="${BASH_REMATCH[2]}"
+            rate="${BASH_REMATCH[3]}"
+        elif [[ "$line" =~ Position:[[:space:]]*(-?[0-9]+),(-?[0-9]+) ]]; then
             x="${BASH_REMATCH[1]}"
             y="${BASH_REMATCH[2]}"
-        elif [[ "$line" =~ Enabled:[[:space:]]*(yes|no) ]]; then
-            [[ "${BASH_REMATCH[1]}" == "yes" ]] && enabled=1 || enabled=0
         fi
     done < <(wlr-randr 2>/dev/null)
 
     if [[ -n "$name" && -n "$w" && -n "$h" && "$enabled" == "1" ]]; then
-        CAPTUREOS_DISPLAY_LINES+=("${name}|${w}|${h}|${x}|${y}|${primary}|${rate}")
+        CAPTUREOS_DISPLAY_LINES+=("${name}|${w}|${h}|${x}|${y}|0|${rate}")
     fi
 
     ((${#CAPTUREOS_DISPLAY_LINES[@]} > 0))
@@ -101,10 +109,12 @@ captureos_apply_wayland_layout() {
     echo "CaptureOS: applying Wayland layout gallery=${gallery_out} booth=${booth_out}"
     captureos_wlr_set_output "$gallery_out" \
         "${CAPTUREOS_GALLERY_X:-0}" "${CAPTUREOS_GALLERY_Y:-0}" \
-        "${CAPTUREOS_GALLERY_W:-}" "${CAPTUREOS_GALLERY_H:-}" || true
+        "${CAPTUREOS_GALLERY_W:-}" "${CAPTUREOS_GALLERY_H:-}" \
+        "${CAPTUREOS_GALLERY_RATE:-60}" || true
     captureos_wlr_set_output "$booth_out" \
         "${CAPTUREOS_BOOTH_X:-0}" "${CAPTUREOS_BOOTH_Y:-0}" \
-        "${CAPTUREOS_BOOTH_W:-}" "${CAPTUREOS_BOOTH_H:-}" || true
+        "${CAPTUREOS_BOOTH_W:-}" "${CAPTUREOS_BOOTH_H:-}" \
+        "${CAPTUREOS_BOOTH_RATE:-60}" || true
 
     sleep 1
     return 0

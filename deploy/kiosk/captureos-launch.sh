@@ -265,6 +265,27 @@ if declare -F captureos_arrange_extended_desktop >/dev/null 2>&1; then
     captureos_resolve_display_layout || true
 fi
 
+# Booth and gallery resolving to the same origin means the dual-display
+# layout hasn't settled yet (mirrored, or the second screen still coming
+# up). Launching now would pile both windows onto one screen — retry the
+# arrangement for a bit first.
+if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+    for _ in $(seq 1 6); do
+        [[ "${CAPTUREOS_BOOTH_X:-0},${CAPTUREOS_BOOTH_Y:-0}" \
+            != "${CAPTUREOS_GALLERY_X:-0},${CAPTUREOS_GALLERY_Y:-0}" ]] && break
+        echo "booth and gallery overlap — re-arranging displays"
+        sleep 2
+        if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
+            && captureos_is_wayland_session \
+            && declare -F captureos_setup_wayland_displays >/dev/null 2>&1; then
+            captureos_setup_wayland_displays || true
+        elif declare -F captureos_arrange_extended_desktop >/dev/null 2>&1; then
+            captureos_arrange_extended_desktop || true
+        fi
+        captureos_resolve_display_layout || true
+    done
+fi
+
 echo "booth display:   ${CAPTUREOS_BOOTH_OUTPUT:-?} at ${CAPTUREOS_BOOTH_X},${CAPTUREOS_BOOTH_Y} ${CAPTUREOS_BOOTH_W}x${CAPTUREOS_BOOTH_H}"
 echo "gallery display: ${CAPTUREOS_GALLERY_OUTPUT:-?} at ${CAPTUREOS_GALLERY_X},${CAPTUREOS_GALLERY_Y} ${CAPTUREOS_GALLERY_W}x${CAPTUREOS_GALLERY_H}"
 
@@ -341,10 +362,12 @@ if declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
     fi
 
     # Last resort: the layout may have settled differently since launch,
-    # or only one display had been detected (booth == gallery output) —
-    # re-resolve the (possibly new) geometry and place once more.
+    # or booth and gallery had resolved to the same screen — re-resolve
+    # the (possibly new) geometry and place once more.
     if { (( booth_placed == 0 || gallery_placed == 0 )) \
-        || [[ "${CAPTUREOS_BOOTH_OUTPUT:-a}" == "${CAPTUREOS_GALLERY_OUTPUT:-b}" ]]; } \
+        || [[ "${CAPTUREOS_BOOTH_OUTPUT:-a}" == "${CAPTUREOS_GALLERY_OUTPUT:-b}" ]] \
+        || [[ "${CAPTUREOS_BOOTH_X:-0},${CAPTUREOS_BOOTH_Y:-0}" \
+              == "${CAPTUREOS_GALLERY_X:-0},${CAPTUREOS_GALLERY_Y:-0}" ]]; } \
         && declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
         echo "re-resolving display layout for a final placement pass"
         if declare -F captureos_wait_for_displays >/dev/null 2>&1; then
