@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CaptureOS Touch Mapping
+Comment=Map USB touch input to the booth touchscreen
+Exec=/opt/captureos/map-touch-input.sh
+Hidden=true
+NoDisplay=true
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

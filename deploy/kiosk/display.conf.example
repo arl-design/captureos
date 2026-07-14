@@ -9,3 +9,7 @@
 # Or assign by pixel geometry (x,y,width,height):
 # CAPTUREOS_BOOTH_GEOM=1920,0,1024,600
 # CAPTUREOS_GALLERY_GEOM=0,0,1920,1080
+#
+# If touch taps hit the wrong screen, set the touch device explicitly:
+# CAPTUREOS_TOUCH_DEVICE="ILITEK ILITEK-TP"
+# CAPTUREOS_TOUCH_DEVICE_ID=8

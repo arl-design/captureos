@@ -71,9 +71,9 @@ End users never need a terminal: tapping the desktop icon runs
 for `/api/health`, then opens two Chromium kiosk windows — the booth UI on the
 **touchscreen** and the gallery on the **main / wall display**. The launcher
 detects connected monitors via `xrandr` (largest panel → gallery, the other
-→ booth touchscreen). If both windows land on the same screen, run
-`captureos-launch.sh --list-displays` and set output names in
-`~/.config/captureos/display.conf` (see `deploy/kiosk/display.conf.example`).
+→ booth touchscreen). If touch taps hit the wrong monitor, the launcher maps
+the USB touch controller to the booth display automatically (`xinput
+map-to-output`). Run `captureos-launch.sh --list-inputs` to debug.
 The same entry runs at boot via `~/.config/autostart`.
 
 The installer surfaces three ways to launch, so you always have one:

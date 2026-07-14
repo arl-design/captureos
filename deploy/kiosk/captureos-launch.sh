@@ -14,6 +14,7 @@
 # Options / env:
 #   --no-browser          start + health-check services, skip Chromium
 #   --list-displays       print connected monitors and exit
+#   --list-inputs         print touch devices and exit
 #   CAPTUREOS_GALLERY=0   don't open the wall-display gallery window
 #
 # Display layout is resolved automatically (smallest monitor -> booth,
@@ -39,19 +40,36 @@ LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/captureos"
 mkdir -p "$LOG_DIR"
 
 LAYOUT_SH="$(dirname "$SELF")/display-layout.sh"
+TOUCH_SH="$(dirname "$SELF")/touch-input.sh"
 if [[ -f "$LAYOUT_SH" ]]; then
     # shellcheck source=display-layout.sh
     source "$LAYOUT_SH"
 fi
+if [[ -f "$TOUCH_SH" ]]; then
+    # shellcheck source=touch-input.sh
+    source "$TOUCH_SH"
+fi
 
 NO_BROWSER=0
 LIST_DISPLAYS=0
+LIST_INPUTS=0
 for arg in "$@"; do
     case "$arg" in
         --no-browser) NO_BROWSER=1 ;;
         --list-displays) LIST_DISPLAYS=1 ;;
+        --list-inputs) LIST_INPUTS=1 ;;
     esac
 done
+
+if [[ $LIST_INPUTS -eq 1 ]]; then
+    if declare -F captureos_print_inputs >/dev/null 2>&1; then
+        captureos_print_inputs
+    else
+        echo "touch-input.sh not found next to $SELF" >&2
+        exit 1
+    fi
+    exit $?
+fi
 
 if [[ $LIST_DISPLAYS -eq 1 ]]; then
     if declare -F captureos_print_displays >/dev/null 2>&1; then
@@ -136,6 +154,10 @@ fi
 
 echo "booth display:   ${CAPTUREOS_BOOTH_OUTPUT:-?} at ${CAPTUREOS_BOOTH_X},${CAPTUREOS_BOOTH_Y} ${CAPTUREOS_BOOTH_W}x${CAPTUREOS_BOOTH_H}"
 echo "gallery display: ${CAPTUREOS_GALLERY_OUTPUT:-?} at ${CAPTUREOS_GALLERY_X},${CAPTUREOS_GALLERY_Y} ${CAPTUREOS_GALLERY_W}x${CAPTUREOS_GALLERY_H}"
+
+if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
+    captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true
+fi
 
 KIOSK_FLAGS=(
     --kiosk
