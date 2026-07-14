@@ -80,31 +80,31 @@ captureos_parse_geom() {
     fi
 }
 
-# Heuristic: the booth touchscreen is usually the smallest connected panel
-# (reference build: 1024x600). The gallery uses the largest other panel.
+# Heuristic: gallery on the main / wall display (largest panel), booth on
+# the touchscreen (the other panel — usually smaller, e.g. 1024x600).
 captureos_auto_assign_displays() {
     local entry name w h x y primary area best_booth="" best_gallery=""
     local booth_area=999999999 gallery_area=0
     for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
         IFS='|' read -r name w h x y primary <<<"$entry"
         area=$((w * h))
-        if (( area < booth_area )); then
-            booth_area=$area
-            best_booth="$entry"
-        fi
-    done
-    for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
-        IFS='|' read -r name w h x y primary <<<"$entry"
-        [[ "$entry" == "$best_booth" ]] && continue
-        area=$((w * h))
         if (( area > gallery_area )); then
             gallery_area=$area
             best_gallery="$entry"
         fi
     done
-    # Single monitor: booth only; gallery shares the same screen (legacy).
-    if [[ -z "$best_gallery" ]]; then
-        best_gallery="$best_booth"
+    for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
+        IFS='|' read -r name w h x y primary <<<"$entry"
+        [[ "$entry" == "$best_gallery" ]] && continue
+        area=$((w * h))
+        if (( area < booth_area )); then
+            booth_area=$area
+            best_booth="$entry"
+        fi
+    done
+    # Single monitor: both share the same screen.
+    if [[ -z "$best_booth" ]]; then
+        best_booth="$best_gallery"
     fi
     CAPTUREOS_AUTO_BOOTH="$best_booth"
     CAPTUREOS_AUTO_GALLERY="$best_gallery"
@@ -208,7 +208,7 @@ captureos_print_displays() {
     echo
     IFS='|' read -r _ bw bh bx by _ <<<"$CAPTUREOS_AUTO_BOOTH"
     IFS='|' read -r _ gw gh gx gy _ <<<"$CAPTUREOS_AUTO_GALLERY"
-    echo "Auto-assignment (smallest -> booth, largest other -> gallery):"
+    echo "Auto-assignment (largest -> gallery, other/smallest -> booth):"
     echo "  Booth:   ${CAPTUREOS_AUTO_BOOTH%%|*}  ->  ${bx},${by} ${bw}x${bh}"
     echo "  Gallery: ${CAPTUREOS_AUTO_GALLERY%%|*}  ->  ${gx},${gy} ${gw}x${gh}"
     echo

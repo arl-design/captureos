@@ -70,8 +70,8 @@ End users never need a terminal: tapping the desktop icon runs
 `deploy/kiosk/captureos-launch.sh`, which ensures the services are up, waits
 for `/api/health`, then opens two Chromium kiosk windows — the booth UI on the
 **touchscreen** and the gallery on the **main / wall display**. The launcher
-detects connected monitors via `xrandr` (smallest panel → booth, largest other
-→ gallery). If both windows land on the same screen, run
+detects connected monitors via `xrandr` (largest panel → gallery, the other
+→ booth touchscreen). If both windows land on the same screen, run
 `captureos-launch.sh --list-displays` and set output names in
 `~/.config/captureos/display.conf` (see `deploy/kiosk/display.conf.example`).
 The same entry runs at boot via `~/.config/autostart`.

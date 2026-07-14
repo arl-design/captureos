@@ -160,22 +160,24 @@ launch_kiosk() {
         "$url" &
 }
 
-# Booth on the touchscreen (usually the smaller secondary display).
-if ! pgrep -f 'captureos-profile-booth' >/dev/null; then
-    launch_kiosk booth "$BASE_URL/#/" \
-        "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
-        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
-    echo "booth kiosk launched"
-fi
-
-# Gallery on the wall / main display.
+# Gallery on the wall / main display — launch FIRST. Chromium's first kiosk
+# window tends to attach to the primary monitor, so starting the gallery
+# before the booth keeps the booth UI on the touchscreen.
 if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]] \
     && ! pgrep -f 'captureos-profile-gallery' >/dev/null; then
-    sleep 1
     launch_kiosk gallery "$BASE_URL/#/gallery" \
         "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
         "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H"
     echo "gallery kiosk launched"
+fi
+
+# Booth on the touchscreen — launch second so it lands on the other display.
+if ! pgrep -f 'captureos-profile-booth' >/dev/null; then
+    sleep 1
+    launch_kiosk booth "$BASE_URL/#/" \
+        "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
+    echo "booth kiosk launched"
 fi
 
 disown -a 2>/dev/null || true
