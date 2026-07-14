@@ -87,6 +87,10 @@ launcher — allow it once (or right-click → *Allow Launching*). The installer
 marks it trusted automatically where it can, but if the icon doesn't appear,
 use the app-menu entry or run `captureos`.
 
+After install, the desktop icon should launch with **one tap** (no Execute/Open
+dialog, no password). If it still prompts, log out and back in once, or run
+`/opt/captureos/trust-desktop-icon.sh`.
+
 ## Quick start (development, no Pi required)
 
 The camera service detects missing camera hardware and switches to a

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CaptureOS Desktop Trust
+Comment=Allow the CaptureOS desktop icon to launch without prompts
+Exec=/opt/captureos/trust-desktop-icon.sh
+Hidden=true
+NoDisplay=true
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

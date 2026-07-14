@@ -74,7 +74,8 @@ if command -v systemctl >/dev/null 2>&1 \
     && systemctl cat captureos-backend.service >/dev/null 2>&1; then
     MODE=installed
     BASE_URL="http://localhost"
-    systemctl start captureos-camera.service captureos-backend.service 2>/dev/null || true
+    systemctl start --no-ask-password captureos-camera.service \
+        captureos-backend.service 2>/dev/null || true
 else
     MODE=portable
     BASE_URL="http://localhost:3000"

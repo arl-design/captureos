@@ -1,0 +1,15 @@
+// Allow the logged-in kiosk user to start/stop CaptureOS services without
+// a password prompt when tapping the desktop icon (systemctl start).
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.local && subject.active &&
+        (action.lookup("verb") == "start" ||
+         action.lookup("verb") == "stop" ||
+         action.lookup("verb") == "restart")) {
+        var unit = action.lookup("unit");
+        if (unit == "captureos-camera.service" ||
+            unit == "captureos-backend.service") {
+            return polkit.Result.YES;
+        }
+    }
+});

@@ -56,6 +56,7 @@ chown -R captureos:captureos "$APP_DIR/data"
 echo "==> Installing launcher, icon, and desktop entry"
 install -m 755 "$REPO_DIR/deploy/kiosk/captureos-launch.sh" "$APP_DIR/captureos-launch.sh"
 install -m 644 "$REPO_DIR/deploy/kiosk/display-layout.sh" "$APP_DIR/display-layout.sh"
+install -m 755 "$REPO_DIR/deploy/kiosk/trust-desktop-icon.sh" "$APP_DIR/trust-desktop-icon.sh"
 install -m 644 "$REPO_DIR/deploy/desktop/captureos-icon.png" "$APP_DIR/captureos-icon.png"
 install -m 644 "$REPO_DIR/deploy/desktop/captureos.desktop" \
     /usr/share/applications/captureos.desktop
@@ -64,6 +65,11 @@ if [[ ! -f /etc/captureos/display.conf ]]; then
     install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
         /etc/captureos/display.conf
 fi
+
+echo "==> Allowing passwordless service control for the kiosk user"
+install -d -m 755 /etc/polkit-1/rules.d
+install -m 644 "$REPO_DIR/deploy/polkit/50-captureos-systemd.rules" \
+    /etc/polkit-1/rules.d/50-captureos-systemd.rules
 
 # A terminal command that always works, even if a Desktop icon doesn't show
 # (headless/Lite, renamed Desktop folder, or a file manager that refuses
@@ -95,16 +101,16 @@ if [[ -n "$KIOSK_USER" ]]; then
         install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
             "$REPO_DIR/deploy/desktop/captureos.desktop" \
             "$KIOSK_HOME/.config/autostart/captureos.desktop"
+        install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
+            "$REPO_DIR/deploy/desktop/captureos-trust.desktop" \
+            "$KIOSK_HOME/.config/autostart/captureos-trust.desktop"
 
-        # Modern desktops (GNOME/Nautilus, PCManFM) ignore .desktop launchers
-        # on the Desktop unless they're marked trusted. Do it as the user so
-        # the icon is clickable without a security prompt.
-        sudo -u "$KIOSK_USER" gio set "$DESKTOP_DIR/captureos.desktop" \
-            metadata::trusted true 2>/dev/null || true
-        # PCManFM (Raspberry Pi OS) reads an executable bit + this key.
-        sudo -u "$KIOSK_USER" gio set "$DESKTOP_DIR/captureos.desktop" \
-            metadata::xfce-exe-checksum "$(sha256sum \
-            "$DESKTOP_DIR/captureos.desktop" | cut -d' ' -f1)" 2>/dev/null || true
+        # Mark the Desktop icon trusted (needs the user's D-Bus session).
+        KIOSK_UID="$(id -u "$KIOSK_USER")"
+        sudo -u "$KIOSK_USER" \
+            XDG_RUNTIME_DIR="/run/user/${KIOSK_UID}" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${KIOSK_UID}/bus" \
+            "$APP_DIR/trust-desktop-icon.sh" 2>/dev/null || true
     fi
 fi
 
@@ -132,5 +138,6 @@ echo "  * the 'CaptureOS Photo Booth' entry in the application menu"
 echo "  * the 'captureos' command in a terminal"
 echo "It also autostarts on boot via ~/.config/autostart."
 echo
-echo "If a fresh Desktop icon shows a 'don't trust' prompt the first time,"
-echo "allow it once (or right-click -> 'Allow Launching')."
+echo "The desktop icon should launch with one tap (no Execute/Open dialog,"
+echo "no password). If it still prompts, log out and back in once, or run:"
+echo "  /opt/captureos/trust-desktop-icon.sh"
