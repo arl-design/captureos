@@ -17,11 +17,9 @@ type Tab = 'home' | 'preview' | 'gallery';
 function CaptureButton({
   className,
   onCapture,
-  as = 'button',
 }: {
   className?: string;
   onCapture: () => void;
-  as?: 'button' | 'div';
 }) {
   const handlePointerUp = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -35,20 +33,6 @@ function CaptureButton({
       onCapture();
     }
   };
-  if (as === 'div') {
-    return (
-      <div
-        className={className}
-        role="button"
-        tabIndex={0}
-        onPointerUp={handlePointerUp}
-        onKeyDown={handleKeyDown}
-        aria-label="Capture"
-      >
-        <CameraIcon size="55%" />
-      </div>
-    );
-  }
   return (
     <button
       type="button"
@@ -150,15 +134,6 @@ export function Booth() {
     setPhase('countdown');
   }, []);
 
-  const handleHomeCapture = useCallback(
-    (e: React.PointerEvent | React.KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      startCountdown();
-    },
-    [startCountdown],
-  );
-
   const accept = () => {
     if (!photo) return;
     api
@@ -219,31 +194,20 @@ export function Booth() {
             <h1>{APP_TAGLINE}</h1>
             <p>Build. Pose. Capture!</p>
           </div>
-          <button
-            type="button"
-            className="preview-card preview-tap-capture"
-            onPointerUp={handleHomeCapture}
-            aria-label="Tap to capture"
-          >
+          <div className="preview-card">
             <PreviewStream className="preview-stream" />
-            <span className="preview-tap-label">Tap to Capture</span>
             <div className="camera-status">
               <span className={`dot ${cameraOk === false ? 'bad' : 'good'}`} />
               {cameraOk === false ? 'Camera Offline' : 'Camera Ready'}
             </div>
-          </button>
+          </div>
           {error && <div className="error-banner">{error}</div>}
-          <button
-            type="button"
-            className="capture-zone"
-            onPointerUp={handleHomeCapture}
-            aria-label="Tap to capture"
-          >
-            <h2>Tap to Capture</h2>
-            <div className="capture-fab capture-fab-inline" aria-hidden="true">
-              <CameraIcon size="55%" />
-            </div>
-          </button>
+          <div className="capture-zone">
+            <CaptureButton
+              className="capture-fab capture-fab-inline"
+              onCapture={startCountdown}
+            />
+          </div>
         </main>
       )}
 
