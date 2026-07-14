@@ -16,6 +16,14 @@ function svgProps({ size = '1em', className }: IconProps) {
   };
 }
 
+export function ExpandIcon(props: IconProps) {
+  return (
+    <svg {...svgProps(props)}>
+      <path d="M5 5h4V3H3v6h2V5Zm10 0V3h-6v2h4Zm4 10h-2v4h-4v2h6v-6ZM5 15H3v6h6v-2H5v-4Z" />
+    </svg>
+  );
+}
+
 export function CameraIcon(props: IconProps) {
   return (
     <svg {...svgProps(props)}>

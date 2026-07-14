@@ -112,10 +112,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
     gap: 1.2rem;
   }
 
-  /* Landscape: use the floating shutter (same as Preview tab) — the grid
-     preview stream was intercepting touches meant for the side button. */
-  .booth-home .capture-fab-inline { display: none; }
-  .booth-home .capture-fab-home { display: flex; }
+  .booth-home .capture-fab-inline { display: flex; }
 
   .booth-heading h1 { font-size: clamp(1.1rem, 3.2vw, 2rem); }
   .booth-heading p { font-size: clamp(0.8rem, 1.8vw, 1.2rem); }
@@ -146,6 +143,35 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   border: 1px solid var(--border);
   border-radius: 0.6rem;
   overflow: hidden;
+  text-align: left;
+}
+
+.preview-tap-capture {
+  position: relative;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.preview-tap-capture:active {
+  outline: 0.2em solid var(--yellow);
+  outline-offset: -0.2em;
+}
+
+.preview-tap-label {
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 0.45em 0.9em;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 65%);
+  color: var(--yellow);
+  font-weight: 800;
+  font-size: clamp(0.85rem, 2.2vw, 1.2rem);
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .preview-card img,
@@ -175,6 +201,13 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   padding-bottom: 1%;
   position: relative;
   z-index: 2;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.capture-zone:active {
+  color: var(--yellow);
 }
 
 .capture-zone h2 { font-size: clamp(0.85rem, 5.5vw, 1.4rem); font-weight: 700; }
@@ -207,9 +240,6 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 
 .capture-fab.floating:active { transform: translateX(-50%) scale(0.94); }
-
-/* Home portrait: inline shutter in the capture zone. Landscape uses floating. */
-.booth-home .capture-fab-home { display: none; }
 
 .booth-preview { position: relative; flex: 1; min-height: 0; }
 
@@ -260,6 +290,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: flex;
   border-top: 1px solid var(--border);
   background: var(--panel);
+  position: relative;
+  z-index: 1;
 }
 
 .booth-nav button {

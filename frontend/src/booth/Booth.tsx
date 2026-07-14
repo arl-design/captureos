@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { CameraIcon, GearIcon, HomeIcon, PhotosIcon } from '../components/Icons';
+import { CameraIcon, ExpandIcon, GearIcon, HomeIcon, PhotosIcon } from '../components/Icons';
 import { api, subscribe } from '../lib/api';
 import { APP_NAME, APP_TAGLINE, APP_VERSION, formatTime } from '../lib/meta';
 import type { Photo, Settings } from '../lib/types';
@@ -17,25 +17,44 @@ type Tab = 'home' | 'preview' | 'gallery';
 function CaptureButton({
   className,
   onCapture,
+  as = 'button',
 }: {
   className?: string;
   onCapture: () => void;
+  as?: 'button' | 'div';
 }) {
+  const handlePointerUp = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onCapture();
+  };
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      onCapture();
+    }
+  };
+  if (as === 'div') {
+    return (
+      <div
+        className={className}
+        role="button"
+        tabIndex={0}
+        onPointerUp={handlePointerUp}
+        onKeyDown={handleKeyDown}
+        aria-label="Capture"
+      >
+        <CameraIcon size="55%" />
+      </div>
+    );
+  }
   return (
     <button
       type="button"
       className={className}
-      onPointerUp={(e) => {
-        // Pointer events are more reliable than click alone on Chromium kiosk touch.
-        e.preventDefault();
-        onCapture();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onCapture();
-        }
-      }}
+      onPointerUp={handlePointerUp}
+      onKeyDown={handleKeyDown}
       aria-label="Capture"
     >
       <CameraIcon size="55%" />
@@ -125,11 +144,20 @@ export function Booth() {
     return () => clearTimeout(timer);
   }, [phase]);
 
-  const startCountdown = () => {
+  const startCountdown = useCallback(() => {
     setError(null);
     setCount(settings.current?.countdown_seconds ?? 3);
     setPhase('countdown');
-  };
+  }, []);
+
+  const handleHomeCapture = useCallback(
+    (e: React.PointerEvent | React.KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startCountdown();
+    },
+    [startCountdown],
+  );
 
   const accept = () => {
     if (!photo) return;
@@ -191,19 +219,31 @@ export function Booth() {
             <h1>{APP_TAGLINE}</h1>
             <p>Build. Pose. Capture!</p>
           </div>
-          <div className="preview-card">
+          <button
+            type="button"
+            className="preview-card preview-tap-capture"
+            onPointerUp={handleHomeCapture}
+            aria-label="Tap to capture"
+          >
             <PreviewStream className="preview-stream" />
+            <span className="preview-tap-label">Tap to Capture</span>
             <div className="camera-status">
               <span className={`dot ${cameraOk === false ? 'bad' : 'good'}`} />
               {cameraOk === false ? 'Camera Offline' : 'Camera Ready'}
             </div>
-          </div>
+          </button>
           {error && <div className="error-banner">{error}</div>}
-          <div className="capture-zone">
+          <button
+            type="button"
+            className="capture-zone"
+            onPointerUp={handleHomeCapture}
+            aria-label="Tap to capture"
+          >
             <h2>Tap to Capture</h2>
-            <CaptureButton className="capture-fab capture-fab-inline" onCapture={startCountdown} />
-          </div>
-          <CaptureButton className="capture-fab floating capture-fab-home" onCapture={startCountdown} />
+            <div className="capture-fab capture-fab-inline" aria-hidden="true">
+              <CameraIcon size="55%" />
+            </div>
+          </button>
         </main>
       )}
 
@@ -235,8 +275,8 @@ export function Booth() {
           Home
         </button>
         <button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')}>
-          <CameraIcon size="1.4em" />
-          Preview
+          <ExpandIcon size="1.4em" />
+          Full Screen
         </button>
         <button className={tab === 'gallery' ? 'active' : ''} onClick={() => setTab('gallery')}>
           <PhotosIcon size="1.4em" />
