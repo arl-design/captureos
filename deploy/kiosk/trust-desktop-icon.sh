@@ -1,9 +1,25 @@
 #!/usr/bin/env bash
 # Mark the CaptureOS Desktop launcher as trusted so Pi OS / PCManFM launches
-# it immediately on double-click (no "Execute / Open?" dialog).
-# Installed to autostart and run once after install when a user session exists.
+# it on double-click without an Execute / Open dialog.
+# Runs at login (autostart) and after install.
 
 set -euo pipefail
+
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/captureos"
+LOG_FILE="$LOG_DIR/trust-desktop.log"
+WAIT_SEC=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --wait) WAIT_SEC="${2:-15}"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+log() {
+    mkdir -p "$LOG_DIR"
+    printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE"
+}
 
 resolve_desktop_dir() {
     local home="$1"
@@ -18,18 +34,63 @@ resolve_desktop_dir() {
     echo "$home/Desktop"
 }
 
+file_uri() {
+    local path="$1"
+    python3 -c 'import pathlib, sys, urllib.parse; print(pathlib.Path(sys.argv[1]).resolve().as_uri())' "$path" 2>/dev/null \
+        || printf 'file://%s' "$(readlink -f "$path" | sed 's/ /%20/g')"
+}
+
+trust_desktop_file() {
+    local file="$1"
+    local uri trusted="" checksum=""
+
+    chmod +x "$file" 2>/dev/null || true
+
+    if ! command -v gio >/dev/null 2>&1; then
+        log "gio missing — cannot mark $file trusted"
+        return 1
+    fi
+
+    uri="$(file_uri "$file")"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        checksum="$(sha256sum "$file" | awk '{print $1}')"
+        # PCManFM on Pi OS: set checksum BEFORE trusted.
+        gio set "$uri" metadata::xfce-exe-checksum "$checksum" 2>/dev/null \
+            || gio set "$file" metadata::xfce-exe-checksum "$checksum" 2>/dev/null \
+            || true
+    fi
+
+    gio set "$uri" metadata::trusted true 2>/dev/null \
+        || gio set "$file" metadata::trusted true 2>/dev/null \
+        || gio set "$uri" metadata::trusted yes 2>/dev/null \
+        || true
+
+    trusted="$(gio info -a metadata::trusted "$uri" 2>/dev/null | awk -F= '/metadata::trusted/ {print $2}' | tr -d " '")"
+    if [[ "$trusted" == "true" || "$trusted" == "yes" ]]; then
+        log "trusted $file"
+        return 0
+    fi
+
+    log "could not verify trust on $file (gio metadata::trusted=${trusted:-unset})"
+    return 1
+}
+
 HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
 DESKTOP_DIR="$(resolve_desktop_dir "$HOME")"
 FILE="$DESKTOP_DIR/captureos.desktop"
 
-[[ -f "$FILE" ]] || exit 0
-
-chmod +x "$FILE" 2>/dev/null || true
-
-if command -v gio >/dev/null 2>&1; then
-    gio set "$FILE" metadata::trusted true 2>/dev/null || true
-    if command -v sha256sum >/dev/null 2>&1; then
-        gio set "$FILE" metadata::xfce-exe-checksum \
-            "$(sha256sum "$FILE" | awk '{print $1}')" 2>/dev/null || true
-    fi
+if (( WAIT_SEC > 0 )); then
+    log "waiting up to ${WAIT_SEC}s for $FILE"
+    for _ in $(seq 1 "$WAIT_SEC"); do
+        [[ -f "$FILE" ]] && break
+        sleep 1
+    done
 fi
+
+[[ -f "$FILE" ]] || {
+    log "no desktop file at $FILE — skipped"
+    exit 0
+}
+
+trust_desktop_file "$FILE" || true

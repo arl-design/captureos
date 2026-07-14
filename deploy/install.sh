@@ -56,6 +56,7 @@ chown -R captureos:captureos "$APP_DIR/data"
 
 echo "==> Installing launcher, icon, and desktop entry"
 install -m 755 "$REPO_DIR/deploy/kiosk/captureos-launch.sh" "$APP_DIR/captureos-launch.sh"
+install -m 755 "$REPO_DIR/deploy/kiosk/captureos-gui.sh" "$APP_DIR/captureos-gui.sh"
 install -m 644 "$REPO_DIR/deploy/kiosk/display-layout.sh" "$APP_DIR/display-layout.sh"
 install -m 755 "$REPO_DIR/deploy/kiosk/trust-desktop-icon.sh" "$APP_DIR/trust-desktop-icon.sh"
 install -m 755 "$REPO_DIR/deploy/kiosk/map-touch-input.sh" "$APP_DIR/map-touch-input.sh"
@@ -99,25 +100,29 @@ if [[ -n "$KIOSK_USER" ]]; then
 
         install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 755 -d \
             "$DESKTOP_DIR" "$KIOSK_HOME/.config/autostart"
-        install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 755 \
+        # -C keeps the Desktop file (and its trusted metadata) when unchanged.
+        install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 755 \
             "$REPO_DIR/deploy/desktop/captureos.desktop" \
             "$DESKTOP_DIR/captureos.desktop"
-        install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
+        install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
             "$REPO_DIR/deploy/desktop/captureos.desktop" \
             "$KIOSK_HOME/.config/autostart/captureos.desktop"
-        install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
+        install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
             "$REPO_DIR/deploy/desktop/captureos-trust.desktop" \
             "$KIOSK_HOME/.config/autostart/captureos-trust.desktop"
-        install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
+        install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
             "$REPO_DIR/deploy/desktop/captureos-touch.desktop" \
             "$KIOSK_HOME/.config/autostart/captureos-touch.desktop"
 
         # Mark the Desktop icon trusted (needs the user's D-Bus session).
         KIOSK_UID="$(id -u "$KIOSK_USER")"
-        sudo -u "$KIOSK_USER" \
+        if ! sudo -u "$KIOSK_USER" \
             XDG_RUNTIME_DIR="/run/user/${KIOSK_UID}" \
             DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${KIOSK_UID}/bus" \
-            "$APP_DIR/trust-desktop-icon.sh" 2>/dev/null || true
+            "$APP_DIR/trust-desktop-icon.sh"; then
+            echo "   (trust will retry at next login — or run on the Pi desktop:"
+            echo "    /opt/captureos/trust-desktop-icon.sh)"
+        fi
     fi
 fi
 
@@ -145,6 +150,8 @@ echo "  * the 'CaptureOS Photo Booth' entry in the application menu"
 echo "  * the 'captureos' command in a terminal"
 echo "It also autostarts on boot via ~/.config/autostart."
 echo
-echo "The desktop icon should launch with one tap (no Execute/Open dialog,"
-echo "no password). If it still prompts, log out and back in once, or run:"
+echo "The desktop icon should launch with one tap (no Execute/Open dialog)."
+echo "If it still prompts, on the Pi desktop run:"
 echo "  /opt/captureos/trust-desktop-icon.sh"
+echo "then right-click the icon -> Allow Launching (once)."
+echo "Or use the app menu entry — it never prompts."

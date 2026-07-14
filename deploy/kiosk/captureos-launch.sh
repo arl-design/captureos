@@ -26,6 +26,9 @@
 
 set -uo pipefail
 
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
+
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 DIR="$(dirname "$SELF")"
 if [[ -d "$DIR/camera-service" ]]; then
@@ -59,13 +62,83 @@ fi
 NO_BROWSER=0
 LIST_DISPLAYS=0
 LIST_INPUTS=0
+DIAGNOSE=0
 for arg in "$@"; do
     case "$arg" in
         --no-browser) NO_BROWSER=1 ;;
         --list-displays) LIST_DISPLAYS=1 ;;
         --list-inputs) LIST_INPUTS=1 ;;
+        --diagnose) DIAGNOSE=1 ;;
     esac
 done
+
+if [[ $DIAGNOSE -eq 1 ]]; then
+    echo "===== CaptureOS display diagnostics ====="
+    echo "date: $(date '+%F %T')"
+    echo
+    echo "--- session ---"
+    echo "XDG_SESSION_TYPE = ${XDG_SESSION_TYPE:-(unset)}"
+    echo "WAYLAND_DISPLAY  = ${WAYLAND_DISPLAY:-(unset)}"
+    echo "DISPLAY          = ${DISPLAY:-(unset)}"
+    echo "XAUTHORITY       = ${XAUTHORITY:-(unset)}"
+    if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        echo ">> This is a WAYLAND session."
+    elif [[ -n "${DISPLAY:-}" ]]; then
+        echo ">> This is an X11 session."
+    else
+        echo ">> No graphical session detected in this shell."
+        echo "   Run this from the Pi's desktop terminal, not over plain SSH."
+    fi
+    echo
+    echo "--- xrandr (X11 / XWayland) ---"
+    if command -v xrandr >/dev/null 2>&1; then
+        DISPLAY="${DISPLAY:-:0}" xrandr --query 2>&1 | grep -E ' connected| disconnected' || echo "(xrandr produced no output)"
+    else
+        echo "xrandr not installed"
+    fi
+    echo
+    echo "--- wlr-randr (Wayland: wlroots/labwc) ---"
+    if command -v wlr-randr >/dev/null 2>&1; then
+        wlr-randr 2>&1 || echo "(wlr-randr failed)"
+    else
+        echo "wlr-randr not installed (apt install wlr-randr)"
+    fi
+    echo
+    echo "--- tools present ---"
+    for t in chromium-browser chromium xrandr xdotool wlr-randr xinput; do
+        if command -v "$t" >/dev/null 2>&1; then
+            echo "  $t: $(command -v "$t")"
+        else
+            echo "  $t: MISSING"
+        fi
+    done
+    echo
+    echo "--- resolved layout (what the launcher would use) ---"
+    if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
+        captureos_resolve_display_layout >/dev/null 2>&1 || true
+        echo "  booth:   ${CAPTUREOS_BOOTH_OUTPUT:-?} at ${CAPTUREOS_BOOTH_X:-?},${CAPTUREOS_BOOTH_Y:-?} ${CAPTUREOS_BOOTH_W:-?}x${CAPTUREOS_BOOTH_H:-?}"
+        echo "  gallery: ${CAPTUREOS_GALLERY_OUTPUT:-?} at ${CAPTUREOS_GALLERY_X:-?},${CAPTUREOS_GALLERY_Y:-?} ${CAPTUREOS_GALLERY_W:-?}x${CAPTUREOS_GALLERY_H:-?}"
+    fi
+    echo
+    echo "--- config files ---"
+    for f in /etc/captureos/display.conf "${XDG_CONFIG_HOME:-$HOME/.config}/captureos/display.conf"; do
+        if [[ -r "$f" ]]; then
+            echo "  $f:"
+            sed 's/^/    /' "$f"
+        else
+            echo "  $f: (none)"
+        fi
+    done
+    echo
+    echo "--- last launcher log ---"
+    if [[ -r "$LOG_DIR/launcher.log" ]]; then
+        tail -n 40 "$LOG_DIR/launcher.log"
+    else
+        echo "(no launcher log yet at $LOG_DIR/launcher.log)"
+    fi
+    echo "===== end diagnostics ====="
+    exit 0
+fi
 
 if [[ $LIST_INPUTS -eq 1 ]]; then
     if declare -F captureos_print_inputs >/dev/null 2>&1; then
