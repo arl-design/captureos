@@ -74,9 +74,19 @@ detects connected monitors via `xrandr` (largest panel → gallery, the other
 → booth touchscreen). If touch taps hit the wrong monitor, the launcher maps
 the USB touch controller to the booth display automatically (`xinput
 map-to-output`). Run `captureos-launch.sh --list-inputs` to debug.
+## Boots straight into the booth
+
+The installer configures **desktop auto-login** and an **autostart** entry, so
+powering on the Pi goes straight into the full-screen photo booth — no login,
+keyboard, or taps required. Just `sudo reboot` after installing.
+
+To disable this (e.g. for a shared workstation), run the installer with
+`CAPTUREOS_NO_AUTOLOGIN=1 sudo -E ./deploy/install.sh`, or turn off Desktop
+Autologin in `sudo raspi-config` → *System Options* → *Boot / Auto Login*.
+
 The same entry runs at boot via `~/.config/autostart`.
 
-The installer surfaces three ways to launch, so you always have one:
+The installer surfaces three ways to launch it manually, so you always have one:
 
 - the **CaptureOS Photo Booth** icon on the Desktop,
 - the **CaptureOS Photo Booth** entry in the application menu, and

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CaptureOS Boot
+Comment=Launch the CaptureOS photo booth on login
+Exec=/opt/captureos/captureos-gui.sh
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+StartupNotify=false

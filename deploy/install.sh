@@ -104,9 +104,13 @@ if [[ -n "$KIOSK_USER" ]]; then
         install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 755 \
             "$REPO_DIR/deploy/desktop/captureos.desktop" \
             "$DESKTOP_DIR/captureos.desktop"
-        install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
-            "$REPO_DIR/deploy/desktop/captureos.desktop" \
-            "$KIOSK_HOME/.config/autostart/captureos.desktop"
+        # Boot straight into the booth: dedicated autostart entry (hidden
+        # from menus) that runs the launcher on login.
+        install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
+            "$REPO_DIR/deploy/desktop/captureos-autostart.desktop" \
+            "$KIOSK_HOME/.config/autostart/captureos-autostart.desktop"
+        # Remove the older reused app entry if a previous install left one.
+        rm -f "$KIOSK_HOME/.config/autostart/captureos.desktop"
         install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
             "$REPO_DIR/deploy/desktop/captureos-trust.desktop" \
             "$KIOSK_HOME/.config/autostart/captureos-trust.desktop"
@@ -123,6 +127,40 @@ if [[ -n "$KIOSK_USER" ]]; then
             echo "   (trust will retry at next login — or run on the Pi desktop:"
             echo "    /opt/captureos/trust-desktop-icon.sh)"
         fi
+    fi
+fi
+
+echo "==> Enabling boot straight into the booth (desktop auto-login)"
+# Boot to the graphical desktop and auto-login the kiosk user so the
+# autostart entry launches CaptureOS with no keyboard/login step. Set
+# CAPTUREOS_NO_AUTOLOGIN=1 before running to skip this.
+if [[ "${CAPTUREOS_NO_AUTOLOGIN:-0}" == "1" ]]; then
+    echo "   Skipped (CAPTUREOS_NO_AUTOLOGIN=1)."
+elif [[ -z "$KIOSK_USER" ]]; then
+    echo "   No target user (run via sudo as the kiosk user) — skipped."
+elif command -v raspi-config >/dev/null 2>&1; then
+    # B4 = boot to Desktop with autologin, for the primary user.
+    if raspi-config nonint do_boot_behaviour B4 2>/dev/null; then
+        echo "   Desktop auto-login enabled for the primary user."
+    else
+        echo "   Could not set it automatically. Run:"
+        echo "     sudo raspi-config  ->  System Options  ->  Boot / Auto Login"
+        echo "     ->  Desktop Autologin"
+    fi
+else
+    # Fallback for non-raspi-config systems using LightDM.
+    if [[ -d /etc/lightdm ]]; then
+        install -d -m 755 /etc/lightdm/lightdm.conf.d
+        cat >/etc/lightdm/lightdm.conf.d/60-captureos-autologin.conf <<EOF
+[Seat:*]
+autologin-user=$KIOSK_USER
+autologin-user-timeout=0
+EOF
+        systemctl set-default graphical.target 2>/dev/null || true
+        echo "   LightDM auto-login configured for '$KIOSK_USER'."
+    else
+        echo "   raspi-config and LightDM not found — enable desktop autologin"
+        echo "   manually so the booth starts without logging in."
     fi
 fi
 
@@ -144,11 +182,13 @@ echo "  Booth UI:   http://localhost/#/"
 echo "  Gallery:    http://localhost/#/gallery"
 echo "  API health: http://localhost/api/health"
 echo
-echo "To launch the kiosk, use any of:"
+echo "The Pi now boots straight into the photo booth (desktop auto-login +"
+echo "autostart). Reboot to try it:  sudo reboot"
+echo
+echo "You can also launch it manually with any of:"
 echo "  * the 'CaptureOS Photo Booth' icon on the Desktop"
 echo "  * the 'CaptureOS Photo Booth' entry in the application menu"
 echo "  * the 'captureos' command in a terminal"
-echo "It also autostarts on boot via ~/.config/autostart."
 echo
 echo "The desktop icon should launch with one tap (no Execute/Open dialog)."
 echo "If it still prompts, on the Pi desktop run:"
