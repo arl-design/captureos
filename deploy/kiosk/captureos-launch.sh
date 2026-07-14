@@ -258,6 +258,10 @@ KIOSK_FLAGS=(
     --check-for-update-interval=31536000
     --overscroll-history-navigation=0
     --pull-to-refresh=0
+    # Auto-login has no keyring password — avoid "application wants access
+    # to keyring but it's locked" on booth boot.
+    --password-store=basic
+    --use-mock-keychain
 )
 # Prefer X11 so --window-position and xdotool can place windows on dual HDMI.
 if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
