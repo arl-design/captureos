@@ -14,6 +14,35 @@ type Tab = 'home' | 'preview' | 'gallery';
 // <img> connection when the element unmounts, so leaked streams pile up
 // against the per-host connection limit until API calls hang. Clearing
 // src on unmount forces the abort.
+function CaptureButton({
+  className,
+  onCapture,
+}: {
+  className?: string;
+  onCapture: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={className}
+      onPointerUp={(e) => {
+        // Pointer events are more reliable than click alone on Chromium kiosk touch.
+        e.preventDefault();
+        onCapture();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onCapture();
+        }
+      }}
+      aria-label="Capture"
+    >
+      <CameraIcon size="55%" />
+    </button>
+  );
+}
+
 function PreviewStream({ className }: { className?: string }) {
   const ref = useRef<HTMLImageElement>(null);
   // src is managed entirely by the effect (not JSX) so that the stream
@@ -163,7 +192,7 @@ export function Booth() {
             <p>Build. Pose. Capture!</p>
           </div>
           <div className="preview-card">
-            <PreviewStream />
+            <PreviewStream className="preview-stream" />
             <div className="camera-status">
               <span className={`dot ${cameraOk === false ? 'bad' : 'good'}`} />
               {cameraOk === false ? 'Camera Offline' : 'Camera Ready'}
@@ -172,19 +201,16 @@ export function Booth() {
           {error && <div className="error-banner">{error}</div>}
           <div className="capture-zone">
             <h2>Tap to Capture</h2>
-            <button className="capture-fab" onClick={startCountdown} aria-label="Capture">
-              <CameraIcon size="55%" />
-            </button>
+            <CaptureButton className="capture-fab capture-fab-inline" onCapture={startCountdown} />
           </div>
+          <CaptureButton className="capture-fab floating capture-fab-home" onCapture={startCountdown} />
         </main>
       )}
 
       {tab === 'preview' && (
         <main className="booth-preview">
-          <PreviewStream className="stage" />
-          <button className="capture-fab floating" onClick={startCountdown} aria-label="Capture">
-            <CameraIcon size="55%" />
-          </button>
+          <PreviewStream className="stage preview-stream" />
+          <CaptureButton className="capture-fab floating" onCapture={startCountdown} />
         </main>
       )}
 

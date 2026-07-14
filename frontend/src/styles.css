@@ -50,6 +50,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 /* ---------- booth (small touch panel) ---------- */
 
 .booth {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -77,6 +78,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .booth-brand { letter-spacing: 0.01em; }
 
 .booth-home {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -110,6 +112,11 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
     gap: 1.2rem;
   }
 
+  /* Landscape: use the floating shutter (same as Preview tab) — the grid
+     preview stream was intercepting touches meant for the side button. */
+  .booth-home .capture-fab-inline { display: none; }
+  .booth-home .capture-fab-home { display: flex; }
+
   .booth-heading h1 { font-size: clamp(1.1rem, 3.2vw, 2rem); }
   .booth-heading p { font-size: clamp(0.8rem, 1.8vw, 1.2rem); }
   .capture-zone h2 { font-size: clamp(1rem, 2.6vw, 1.7rem); }
@@ -141,11 +148,15 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   overflow: hidden;
 }
 
-.preview-card img {
+.preview-card img,
+.preview-stream {
   flex: 1;
   min-height: 0;
   width: 100%;
   object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .camera-status {
@@ -162,6 +173,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   gap: 4%;
   padding-bottom: 1%;
+  position: relative;
+  z-index: 2;
 }
 
 .capture-zone h2 { font-size: clamp(0.85rem, 5.5vw, 1.4rem); font-weight: 700; }
@@ -179,6 +192,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   border: 0.22em solid #111;
   outline: 0.22em solid var(--yellow-deep);
   box-shadow: 0 0.35em 1em rgb(0 0 0 / 55%);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .capture-fab:active { transform: scale(0.94); }
@@ -192,6 +207,9 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 
 .capture-fab.floating:active { transform: translateX(-50%) scale(0.94); }
+
+/* Home portrait: inline shutter in the capture zone. Landscape uses floating. */
+.booth-home .capture-fab-home { display: none; }
 
 .booth-preview { position: relative; flex: 1; min-height: 0; }
 
