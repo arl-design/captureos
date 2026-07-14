@@ -76,9 +76,36 @@ trust_desktop_file() {
     return 1
 }
 
+# PCManFM "Execute file?" dialog: quick_exec=1 launches executables and
+# launchers directly instead of asking Execute / Open every time.
+enable_quick_exec() {
+    local conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/libfm"
+    local conf="$conf_dir/libfm.conf"
+    mkdir -p "$conf_dir"
+    if [[ ! -f "$conf" ]]; then
+        printf '[config]\nquick_exec=1\n' >"$conf"
+        log "created $conf with quick_exec=1"
+    elif grep -q '^quick_exec=' "$conf"; then
+        if ! grep -q '^quick_exec=1' "$conf"; then
+            sed -i 's/^quick_exec=.*/quick_exec=1/' "$conf"
+            log "set quick_exec=1 in $conf"
+        fi
+    elif grep -q '^\[config\]' "$conf"; then
+        sed -i '/^\[config\]/a quick_exec=1' "$conf"
+        log "added quick_exec=1 to $conf"
+    else
+        printf '\n[config]\nquick_exec=1\n' >>"$conf"
+        log "appended [config] quick_exec=1 to $conf"
+    fi
+    # Desktop is drawn by pcmanfm; ask it to reload so the change is live.
+    command -v pcmanfm >/dev/null 2>&1 && pcmanfm --reconfigure 2>/dev/null || true
+}
+
 HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
 DESKTOP_DIR="$(resolve_desktop_dir "$HOME")"
 FILE="$DESKTOP_DIR/captureos.desktop"
+
+enable_quick_exec || true
 
 if (( WAIT_SEC > 0 )); then
     log "waiting up to ${WAIT_SEC}s for $FILE"

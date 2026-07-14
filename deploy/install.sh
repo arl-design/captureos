@@ -121,6 +121,37 @@ if [[ -n "$KIOSK_USER" ]]; then
             "$KIOSK_HOME/.config/autostart/captureos-00-display.desktop"
         rm -f "$KIOSK_HOME/.config/autostart/captureos-touch.desktop"
 
+        # labwc (Pi OS Bookworm default) runs ~/.config/labwc/autostart as a
+        # shell script. Hook the booth there too, in case XDG autostart
+        # entries are not honored. The launcher's lock prevents double-start.
+        install -o "$KIOSK_USER" -g "$KIOSK_USER" -m 755 -d \
+            "$KIOSK_HOME/.config/labwc"
+        LABWC_AUTOSTART="$KIOSK_HOME/.config/labwc/autostart"
+        if ! grep -q 'captureos-boot' "$LABWC_AUTOSTART" 2>/dev/null; then
+            cat >>"$LABWC_AUTOSTART" <<'EOF'
+# captureos-boot: start the photo booth at login
+/opt/captureos/setup-displays.sh >/dev/null 2>&1 &
+/opt/captureos/captureos-gui.sh >/dev/null 2>&1 &
+EOF
+            chown "$KIOSK_USER:$KIOSK_USER" "$LABWC_AUTOSTART"
+            chmod 755 "$LABWC_AUTOSTART"
+            echo "   Added CaptureOS to labwc autostart."
+        fi
+
+        # Skip the PCManFM Execute/Open dialog for the desktop icon.
+        sudo -u "$KIOSK_USER" mkdir -p "$KIOSK_HOME/.config/libfm"
+        LIBFM_CONF="$KIOSK_HOME/.config/libfm/libfm.conf"
+        if [[ ! -f "$LIBFM_CONF" ]]; then
+            printf '[config]\nquick_exec=1\n' >"$LIBFM_CONF"
+            chown "$KIOSK_USER:$KIOSK_USER" "$LIBFM_CONF"
+        elif grep -q '^quick_exec=' "$LIBFM_CONF"; then
+            sed -i 's/^quick_exec=.*/quick_exec=1/' "$LIBFM_CONF"
+        elif grep -q '^\[config\]' "$LIBFM_CONF"; then
+            sed -i '/^\[config\]/a quick_exec=1' "$LIBFM_CONF"
+        else
+            printf '\n[config]\nquick_exec=1\n' >>"$LIBFM_CONF"
+        fi
+
         # Mark the Desktop icon trusted (needs the user's D-Bus session).
         KIOSK_UID="$(id -u "$KIOSK_USER")"
         if ! sudo -u "$KIOSK_USER" \

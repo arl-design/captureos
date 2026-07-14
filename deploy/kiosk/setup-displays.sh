@@ -24,7 +24,7 @@ if declare -F captureos_ensure_x_display >/dev/null 2>&1; then
     captureos_ensure_x_display || true
 fi
 
-for attempt in $(seq 1 12); do
+for attempt in $(seq 1 4); do
     if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
         && captureos_is_wayland_session \
         && declare -F captureos_setup_wayland_displays >/dev/null 2>&1; then
@@ -33,7 +33,7 @@ for attempt in $(seq 1 12); do
             break
         fi
     elif declare -F captureos_wait_for_displays >/dev/null 2>&1 \
-        && captureos_wait_for_displays 2; then
+        && captureos_wait_for_displays 2 5; then
         if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
             captureos_resolve_display_layout || true
         fi
@@ -44,17 +44,17 @@ for attempt in $(seq 1 12); do
         echo "X11 display setup succeeded on attempt ${attempt}"
         break
     fi
-    echo "waiting for displays (attempt ${attempt}/12)..."
-    sleep 5
+    echo "waiting for displays (attempt ${attempt}/4)..."
+    sleep 3
 done
 
 if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
-    for attempt in $(seq 1 6); do
+    for attempt in $(seq 1 4); do
         if captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}"; then
             echo "touch mapping succeeded on attempt ${attempt}"
             break
         fi
-        sleep 3
+        sleep 2
     done
 fi
 

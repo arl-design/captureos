@@ -170,6 +170,14 @@ if [[ $NO_BROWSER -eq 0 ]]; then
 fi
 echo "[$(date '+%F %T')] CaptureOS launcher starting (app: $APP_DIR)"
 
+# Only one launcher at a time (autostart + desktop icon can race).
+LOCK_FILE="$LOG_DIR/launcher.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "another CaptureOS launcher is already running — exiting"
+    exit 0
+fi
+
 # --- 1. make sure the services are running -------------------------------
 
 if command -v systemctl >/dev/null 2>&1 \
@@ -183,14 +191,14 @@ else
     BASE_URL="http://localhost:3000"
     if ! pgrep -f 'python3 camera_service.py' >/dev/null; then
         (cd "$APP_DIR/camera-service" \
-            && nohup python3 camera_service.py >>"$LOG_DIR/camera.out" 2>&1 &)
+            && nohup python3 camera_service.py >>"$LOG_DIR/camera.out" 2>&1 9>&- &)
     fi
     if ! pgrep -f 'node src/server.js' >/dev/null; then
         if [[ ! -d "$APP_DIR/backend/node_modules" ]]; then
             (cd "$APP_DIR/backend" && npm install --omit=dev --silent)
         fi
         (cd "$APP_DIR/backend" \
-            && nohup node src/server.js >>"$LOG_DIR/backend.out" 2>&1 &)
+            && nohup node src/server.js >>"$LOG_DIR/backend.out" 2>&1 9>&- &)
     fi
 fi
 echo "mode: $MODE, base url: $BASE_URL"
@@ -227,14 +235,16 @@ if declare -F captureos_ensure_x_display >/dev/null 2>&1; then
     captureos_ensure_x_display || true
 fi
 if declare -F captureos_wait_for_displays >/dev/null 2>&1; then
-    captureos_wait_for_displays 2 || true
+    # Short wait: with one monitor this must not stall the booth.
+    captureos_wait_for_displays 2 5 || true
 fi
 
 # Re-apply dual-display + touch (Screen Configuration often resets on reboot).
 if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
     && captureos_is_wayland_session \
     && declare -F captureos_setup_wayland_displays >/dev/null 2>&1; then
-    captureos_setup_wayland_displays || true
+    CAPTUREOS_DISPLAY_WAIT="${CAPTUREOS_DISPLAY_WAIT:-3}" \
+        captureos_setup_wayland_displays || true
 fi
 
 if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
@@ -283,12 +293,13 @@ KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
 
 launch_kiosk() {
     local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
+    # 9>&- so Chromium does not inherit (and hold) the launcher lock.
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
         --class="$class" \
         --user-data-dir="$LOG_DIR/captureos-profile-${profile}" \
         --window-position="${x},${y}" \
         --window-size="${w},${h}" \
-        "$url" &
+        "$url" 9>&- &
 }
 
 # Gallery on the wall / main display.
@@ -322,7 +333,7 @@ if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
     captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true
     # Touch USB can enumerate after the compositor starts — retry briefly.
     ( sleep 5
-      captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true ) &
+      captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true ) 9>&- &
 fi
 
 disown -a 2>/dev/null || true

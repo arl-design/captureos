@@ -7,5 +7,4 @@ Exec=/opt/captureos/captureos-gui.sh
 Terminal=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
-X-GNOME-Autostart-Delay=10
 StartupNotify=false

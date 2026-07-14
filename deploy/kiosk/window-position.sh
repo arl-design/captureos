@@ -13,7 +13,7 @@ captureos_ensure_x_display() {
     fi
 
     local attempt
-    for attempt in $(seq 1 30); do
+    for attempt in $(seq 1 "${CAPTUREOS_X_WAIT:-15}"); do
         if xrandr --query >/dev/null 2>&1; then
             return 0
         fi
@@ -24,9 +24,9 @@ captureos_ensure_x_display() {
 }
 
 captureos_wait_for_displays() {
-    local want="${1:-2}" count attempt
+    local want="${1:-2}" timeout="${2:-10}" count attempt
     captureos_ensure_x_display || return 1
-    for attempt in $(seq 1 45); do
+    for attempt in $(seq 1 "$timeout"); do
         if declare -F captureos_collect_xrandr_displays >/dev/null 2>&1 \
             && captureos_collect_xrandr_displays; then
             count="${#CAPTUREOS_DISPLAY_LINES[@]}"

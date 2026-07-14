@@ -146,8 +146,8 @@ EOF
 }
 
 captureos_wait_for_wayland_displays() {
-    local want="${1:-2}" count attempt
-    for attempt in $(seq 1 60); do
+    local want="${1:-2}" timeout="${2:-10}" count attempt
+    for attempt in $(seq 1 "$timeout"); do
         if captureos_collect_wlr_displays; then
             count="${#CAPTUREOS_DISPLAY_LINES[@]}"
             (( count >= want )) && return 0
@@ -163,7 +163,7 @@ captureos_setup_wayland_displays() {
     captureos_is_wayland_session || return 1
     command -v wlr-randr >/dev/null 2>&1 || return 1
 
-    captureos_wait_for_wayland_displays 2 || true
+    captureos_wait_for_wayland_displays 2 "${CAPTUREOS_DISPLAY_WAIT:-8}" || true
 
     if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
         if captureos_collect_wlr_displays 2>/dev/null; then
