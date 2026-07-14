@@ -167,6 +167,52 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   background: rgb(0 0 0 / 45%);
 }
 
+/* Tap-to-focus preview wrapper: catches taps that the pointer-events:none
+   stream image ignores, and hosts the focus ring indicator. */
+.tap-focus {
+  position: relative;
+  touch-action: manipulation;
+  cursor: crosshair;
+}
+
+.tap-focus.card-fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tap-focus.card-fill .preview-stream {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.tap-focus.stage-fill {
+  position: absolute;
+  inset: 0;
+}
+
+.focus-ring {
+  position: absolute;
+  z-index: 3;
+  width: 4.2rem;
+  height: 4.2rem;
+  margin: -2.1rem 0 0 -2.1rem;
+  border: 3px solid var(--accent, #ffcd00);
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: 0 0 12px rgb(255 205 0 / 55%);
+  animation: focus-pulse 1.2s ease-out forwards;
+}
+
+@keyframes focus-pulse {
+  0% { transform: scale(1.35); opacity: 1; }
+  55% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
 .capture-zone {
   flex: 0 0 auto;
   display: flex;

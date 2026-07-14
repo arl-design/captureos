@@ -37,6 +37,25 @@ export async function requestCapture(options) {
   return body;
 }
 
+export async function requestFocus(body) {
+  let res;
+  try {
+    res = await fetch(`${config.cameraServiceUrl}/focus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch (err) {
+    throw new CameraError(`camera service unreachable: ${err.message}`, 503);
+  }
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload.ok) {
+    throw new CameraError(payload.error ?? `focus failed (${res.status})`, res.status);
+  }
+  return payload;
+}
+
 // Pipe the MJPEG preview stream through to the client.
 export async function proxyPreview(req, res) {
   let upstream;

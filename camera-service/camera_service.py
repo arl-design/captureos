@@ -11,6 +11,9 @@ Endpoints:
     GET  /frame    -> single JPEG preview frame
     GET  /preview  -> multipart/x-mixed-replace MJPEG stream
     POST /capture  -> capture full-res photo, run pipeline, return metadata
+    GET  /focus    -> current tap-to-focus window (or null)
+    POST /focus    -> {"x":0..1,"y":0..1[,"size":0..1]} set focus window,
+                      {"reset":true} return to full-frame autofocus
 
 Configuration via environment:
     CAMERA_PORT        listen port (default 5000)
@@ -78,6 +81,66 @@ logger.addHandler(_handler)
 # Serialize hardware access: libcamera only allows one client at a time.
 camera_lock = threading.Lock()
 
+# Tap-to-focus: normalized (x, y, w, h) autofocus window, or None for
+# full-frame autofocus. Guarded by focus_lock; AF support is detected
+# lazily (cameras like the HQ module have no motorized focus).
+focus_lock = threading.Lock()
+focus_window: tuple[float, float, float, float] | None = None
+af_supported: bool | None = None
+
+
+def get_focus_window() -> tuple[float, float, float, float] | None:
+    with focus_lock:
+        return focus_window
+
+
+def set_focus_window(win: tuple[float, float, float, float] | None) -> None:
+    global focus_window
+    with focus_lock:
+        focus_window = win
+
+
+def focus_args(for_capture: bool) -> list[str]:
+    """rpicam autofocus arguments for the current focus window."""
+    if af_supported is False:
+        return []
+    win = get_focus_window()
+    if win is None:
+        return []
+    x, y, w, h = win
+    args = [
+        "--autofocus-window", f"{x:.4f},{y:.4f},{w:.4f},{h:.4f}",
+    ]
+    if for_capture:
+        # Run a full AF cycle on the window right before the shot.
+        args += ["--autofocus-mode", "auto", "--autofocus-on-capture"]
+    else:
+        # Preview frames are immediate; continuous AF just biases the lens
+        # toward the window without adding a blocking AF cycle.
+        args += ["--autofocus-mode", "continuous"]
+    return args
+
+
+def run_capture_cmd(base_cmd: list[str], af_args: list[str], timeout: float):
+    """Run rpicam with AF args, falling back (once, globally) without them
+    when the camera has no autofocus support."""
+    global af_supported
+    result = subprocess.run(
+        base_cmd + af_args, capture_output=True, timeout=timeout
+    )
+    if result.returncode == 0 or not af_args:
+        if af_args and result.returncode == 0:
+            af_supported = True
+        return result
+    retry = subprocess.run(base_cmd, capture_output=True, timeout=timeout)
+    if retry.returncode == 0:
+        af_supported = False
+        logger.warning(
+            "camera rejected autofocus options — tap-to-focus disabled: %s",
+            result.stderr.decode(errors="replace")[-200:],
+        )
+    return retry
+
 
 def dev_frame(size: tuple[int, int], full_quality: bool = False) -> bytes:
     """Synthetic camera frame: animated backdrop with a timestamp."""
@@ -111,19 +174,18 @@ def capture_still() -> bytes:
     """Capture a full-resolution still as JPEG bytes."""
     if CAPTURE_BIN is None:
         return dev_frame((2028, 1520), full_quality=True)
+    base_cmd = [
+        CAPTURE_BIN,
+        "-n",  # no preview window
+        "-t", "300",
+        "--width", "3280",
+        "--height", "2464",
+        "-q", "95",
+        "-o", "-",
+    ]
     with camera_lock:
-        result = subprocess.run(
-            [
-                CAPTURE_BIN,
-                "-n",  # no preview window
-                "-t", "300",
-                "--width", "3280",
-                "--height", "2464",
-                "-q", "95",
-                "-o", "-",
-            ],
-            capture_output=True,
-            timeout=CAPTURE_TIMEOUT_S,
+        result = run_capture_cmd(
+            base_cmd, focus_args(for_capture=True), CAPTURE_TIMEOUT_S
         )
     if result.returncode != 0 or not result.stdout:
         raise RuntimeError(
@@ -137,20 +199,19 @@ def preview_frame() -> bytes:
     """A single low-latency preview frame."""
     if CAPTURE_BIN is None:
         return dev_frame(PREVIEW_SIZE)
+    base_cmd = [
+        CAPTURE_BIN,
+        "-n",
+        "-t", "1",
+        "--width", str(PREVIEW_SIZE[0]),
+        "--height", str(PREVIEW_SIZE[1]),
+        "-q", "70",
+        "--immediate",
+        "-o", "-",
+    ]
     with camera_lock:
-        result = subprocess.run(
-            [
-                CAPTURE_BIN,
-                "-n",
-                "-t", "1",
-                "--width", str(PREVIEW_SIZE[0]),
-                "--height", str(PREVIEW_SIZE[1]),
-                "-q", "70",
-                "--immediate",
-                "-o", "-",
-            ],
-            capture_output=True,
-            timeout=CAPTURE_TIMEOUT_S,
+        result = run_capture_cmd(
+            base_cmd, focus_args(for_capture=False), CAPTURE_TIMEOUT_S
         )
     if result.returncode != 0 or not result.stdout:
         raise RuntimeError("preview capture failed")
@@ -176,6 +237,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/health":
             self.send_json({"ok": True, "camera": CAMERA_MODE})
+        elif self.path == "/focus":
+            win = get_focus_window()
+            self.send_json(
+                {"ok": True, "window": list(win) if win else None,
+                 "af_supported": af_supported}
+            )
         elif self.path == "/frame":
             try:
                 frame = preview_frame()
@@ -221,8 +288,39 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass  # client went away — normal for preview streams
 
+    def handle_focus(self, options: dict) -> None:
+        if options.get("reset"):
+            set_focus_window(None)
+            logger.info("focus window reset to full frame")
+            self.send_json({"ok": True, "window": None})
+            return
+        try:
+            x = float(options["x"])
+            y = float(options["y"])
+        except (KeyError, TypeError, ValueError):
+            self.send_json(
+                {"ok": False, "error": "body must include x and y in 0..1"}, 400
+            )
+            return
+        if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+            self.send_json({"ok": False, "error": "x and y must be in 0..1"}, 400)
+            return
+        try:
+            size = float(options.get("size", 0.25))
+        except (TypeError, ValueError):
+            size = 0.25
+        size = min(max(size, 0.05), 1.0)
+        x0 = min(max(x - size / 2, 0.0), 1.0 - size)
+        y0 = min(max(y - size / 2, 0.0), 1.0 - size)
+        win = (round(x0, 4), round(y0, 4), size, size)
+        set_focus_window(win)
+        logger.info("focus window set to %s", win)
+        self.send_json(
+            {"ok": True, "window": list(win), "af_supported": af_supported}
+        )
+
     def do_POST(self) -> None:
-        if self.path != "/capture":
+        if self.path not in ("/capture", "/focus"):
             self.send_json({"ok": False, "error": "not found"}, 404)
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -233,6 +331,9 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self.send_json({"ok": False, "error": "invalid JSON body"}, 400)
                 return
+        if self.path == "/focus":
+            self.handle_focus(options)
+            return
         try:
             raw = capture_still()
             logger.info("capture ok (%d bytes raw)", len(raw))

@@ -61,6 +61,72 @@ function PreviewStream({ className }: { className?: string }) {
   return <img ref={ref} className={className} alt="Live preview" />;
 }
 
+// Live preview with tap-to-focus: tapping tells the camera to autofocus
+// on that spot (shown with a brief yellow ring).
+function TapFocusPreview({
+  variant,
+}: {
+  variant: 'card' | 'stage';
+}) {
+  const ref = useRef<HTMLImageElement>(null);
+  const [ring, setRing] = useState<{ left: number; top: number; key: number } | null>(null);
+
+  useEffect(() => {
+    const img = ref.current;
+    if (img) img.src = api.previewUrl;
+    return () => {
+      if (img) img.src = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ring) return;
+    const timer = setTimeout(() => setRing(null), 1200);
+    return () => clearTimeout(timer);
+  }, [ring]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const img = ref.current;
+    if (!img) return;
+    const rect = img.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    // The stream renders with object-fit: cover — undo the crop so the
+    // tap maps to the actual camera frame coordinates.
+    const nw = img.naturalWidth || 640;
+    const nh = img.naturalHeight || 480;
+    const scale = Math.max(rect.width / nw, rect.height / nh);
+    const dispW = nw * scale;
+    const dispH = nh * scale;
+    const x = (px + (dispW - rect.width) / 2) / dispW;
+    const y = (py + (dispH - rect.height) / 2) / dispH;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    setRing({ left: px, top: py, key: Date.now() });
+    api.focus(x, y).catch(() => {});
+  };
+
+  return (
+    <div
+      className={`tap-focus ${variant === 'stage' ? 'stage-fill' : 'card-fill'}`}
+      onPointerDown={handlePointerDown}
+    >
+      <img
+        ref={ref}
+        className={variant === 'stage' ? 'stage preview-stream' : 'preview-stream'}
+        alt="Live preview — tap to focus"
+      />
+      {ring && (
+        <span
+          key={ring.key}
+          className="focus-ring"
+          style={{ left: ring.left, top: ring.top }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function Booth() {
   const [tab, setTab] = useState<Tab>('home');
   const [phase, setPhase] = useState<Phase>('ready');
@@ -195,7 +261,7 @@ export function Booth() {
             <p>Build. Pose. Capture!</p>
           </div>
           <div className="preview-card">
-            <PreviewStream className="preview-stream" />
+            <TapFocusPreview variant="card" />
             <div className="camera-status">
               <span className={`dot ${cameraOk === false ? 'bad' : 'good'}`} />
               {cameraOk === false ? 'Camera Offline' : 'Camera Ready'}
@@ -213,7 +279,7 @@ export function Booth() {
 
       {tab === 'preview' && (
         <main className="booth-preview">
-          <PreviewStream className="stage preview-stream" />
+          <TapFocusPreview variant="stage" />
           <CaptureButton className="capture-fab floating" onCapture={startCountdown} />
         </main>
       )}

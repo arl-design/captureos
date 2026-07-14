@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 
 import { createAdminRouter } from './admin.js';
-import { CameraError, cameraHealth, proxyPreview, requestCapture } from './camera.js';
+import { CameraError, cameraHealth, proxyPreview, requestCapture, requestFocus } from './camera.js';
 import { config, paths } from './config.js';
 import { getSettings, statements, toPhotoDto, updateSettings } from './db.js';
 import { broadcast, sseHandler } from './events.js';
@@ -81,6 +81,19 @@ export function createApp() {
     const photo = toPhotoDto(statements.photoById.get(lastInsertRowid));
     log.info('photo captured', { id: photo.id });
     res.status(201).json(photo);
+  });
+
+  // Tap-to-focus: forward the normalized tap point to the camera service.
+  api.post('/focus', async (req, res) => {
+    try {
+      res.json(await requestFocus(req.body));
+    } catch (err) {
+      if (err instanceof CameraError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
   });
 
   api.post('/accept', (req, res) => {

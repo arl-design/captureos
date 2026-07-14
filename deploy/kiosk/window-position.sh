@@ -69,9 +69,24 @@ captureos_position_window_class() {
         return 1
     }
 
+    # Kiosk windows are fullscreen; the WM pins fullscreen windows to their
+    # current monitor, so drop fullscreen before moving and restore after.
+    xdotool windowstate --remove FULLSCREEN "$wid" 2>/dev/null \
+        || { command -v wmctrl >/dev/null 2>&1 \
+             && wmctrl -i -r "$wid" -b remove,fullscreen 2>/dev/null; } \
+        || true
+    sleep 0.2
     xdotool windowmove "$wid" "$x" "$y" 2>/dev/null || true
     xdotool windowsize "$wid" "$w" "$h" 2>/dev/null || true
-    echo "CaptureOS: positioned ${class} window ${wid} at ${x},${y} ${w}x${h}"
+    sleep 0.2
+    xdotool windowstate --add FULLSCREEN "$wid" 2>/dev/null \
+        || { command -v wmctrl >/dev/null 2>&1 \
+             && wmctrl -i -r "$wid" -b add,fullscreen 2>/dev/null; } \
+        || true
+
+    local geom
+    geom="$(xdotool getwindowgeometry --shell "$wid" 2>/dev/null | tr '\n' ' ')"
+    echo "CaptureOS: positioned ${class} window ${wid} at ${x},${y} ${w}x${h} (now: ${geom:-unknown})"
     return 0
 }
 
