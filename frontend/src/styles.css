@@ -607,6 +607,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .admin-header h1 span { color: var(--text); font-weight: 500; }
 
+.admin-header-actions { display: flex; gap: 0.5rem; }
+
 .admin-tabs {
   display: flex;
   gap: 0.25rem;
@@ -687,6 +689,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 
 .login-card h1 { font-size: 1.2rem; }
+
+.login-card .login-exit { align-self: stretch; text-align: center; }
 
 .admin input, .admin select {
   background: var(--card);

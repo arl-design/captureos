@@ -14,6 +14,22 @@ import type { Photo, Settings } from '../lib/types';
 
 type Tab = 'settings' | 'diagnostics' | 'photos' | 'backups' | 'logs';
 
+// Leave the admin console. In kiosk mode there is no browser chrome, so
+// return to where the user came from (e.g. the gallery link), falling back
+// to the booth home when admin was opened directly.
+function leaveAdmin() {
+  if (window.history.length > 1) {
+    window.history.back();
+    setTimeout(() => {
+      if ((window.location.hash.slice(1) || '/').startsWith('/admin')) {
+        window.location.hash = '#/';
+      }
+    }, 150);
+  } else {
+    window.location.hash = '#/';
+  }
+}
+
 // LAN administration panel (admin console). PIN login -> tabbed console.
 export function Admin() {
   const [authed, setAuthed] = useState(() => getToken() !== null);
@@ -32,15 +48,20 @@ export function Admin() {
         <h1>
           {APP_NAME} <span>Admin</span>
         </h1>
-        <button
-          className="admin-btn ghost"
-          onClick={() => {
-            clearToken();
-            setAuthed(false);
-          }}
-        >
-          Log out
-        </button>
+        <div className="admin-header-actions">
+          <button
+            className="admin-btn ghost"
+            onClick={() => {
+              clearToken();
+              setAuthed(false);
+            }}
+          >
+            Log out
+          </button>
+          <button className="admin-btn ghost" onClick={leaveAdmin}>
+            Exit
+          </button>
+        </div>
       </header>
 
       <nav className="admin-tabs">
@@ -97,6 +118,9 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
         {error && <div className="admin-error">{error}</div>}
         <button className="admin-btn" disabled={busy || pin.length === 0}>
           {busy ? '…' : 'Unlock'}
+        </button>
+        <button type="button" className="admin-btn ghost login-exit" onClick={leaveAdmin}>
+          Exit to booth
         </button>
       </form>
     </div>
