@@ -1,0 +1,11 @@
+# CaptureOS display layout (optional).
+# Copy to /etc/captureos/display.conf or ~/.config/captureos/display.conf
+# and uncomment/adjust after running:  captureos-launch.sh --list-displays
+#
+# Assign by output name (from xrandr):
+# CAPTUREOS_BOOTH_OUTPUT=HDMI-2
+# CAPTUREOS_GALLERY_OUTPUT=HDMI-1
+#
+# Or assign by pixel geometry (x,y,width,height):
+# CAPTUREOS_BOOTH_GEOM=1920,0,1024,600
+# CAPTUREOS_GALLERY_GEOM=0,0,1920,1080

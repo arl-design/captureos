@@ -69,10 +69,12 @@ icon on the Desktop, in the app menu, and in autostart. Re-running it later
 End users never need a terminal: tapping the desktop icon runs
 `deploy/kiosk/captureos-launch.sh`, which ensures the services are up, waits
 for `/api/health`, then opens two Chromium kiosk windows — the booth UI on the
-touchscreen and the gallery on the wall display (positioned right of the
-touchscreen; set `TOUCH_WIDTH` if yours isn't 1024 px wide, or
-`CAPTUREOS_GALLERY=0` to skip it). The same entry runs at boot via
-`~/.config/autostart`.
+**touchscreen** and the gallery on the **main / wall display**. The launcher
+detects connected monitors via `xrandr` (smallest panel → booth, largest other
+→ gallery). If both windows land on the same screen, run
+`captureos-launch.sh --list-displays` and set output names in
+`~/.config/captureos/display.conf` (see `deploy/kiosk/display.conf.example`).
+The same entry runs at boot via `~/.config/autostart`.
 
 The installer surfaces three ways to launch, so you always have one:
 

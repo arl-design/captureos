@@ -13,9 +13,14 @@
 #
 # Options / env:
 #   --no-browser          start + health-check services, skip Chromium
+#   --list-displays       print connected monitors and exit
 #   CAPTUREOS_GALLERY=0   don't open the wall-display gallery window
-#   TOUCH_WIDTH=1024      touchscreen width; the gallery window is
-#                         placed to its right
+#
+# Display layout is resolved automatically (smallest monitor -> booth,
+# largest other -> gallery). Override in ~/.config/captureos/display.conf:
+#   CAPTUREOS_BOOTH_OUTPUT=HDMI-2
+#   CAPTUREOS_GALLERY_OUTPUT=HDMI-1
+# Run with --list-displays to see output names on your Pi.
 
 set -uo pipefail
 
@@ -33,8 +38,30 @@ fi
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/captureos"
 mkdir -p "$LOG_DIR"
 
+LAYOUT_SH="$(dirname "$SELF")/display-layout.sh"
+if [[ -f "$LAYOUT_SH" ]]; then
+    # shellcheck source=display-layout.sh
+    source "$LAYOUT_SH"
+fi
+
 NO_BROWSER=0
-[[ "${1:-}" == "--no-browser" ]] && NO_BROWSER=1
+LIST_DISPLAYS=0
+for arg in "$@"; do
+    case "$arg" in
+        --no-browser) NO_BROWSER=1 ;;
+        --list-displays) LIST_DISPLAYS=1 ;;
+    esac
+done
+
+if [[ $LIST_DISPLAYS -eq 1 ]]; then
+    if declare -F captureos_print_displays >/dev/null 2>&1; then
+        captureos_print_displays
+    else
+        echo "display-layout.sh not found next to $SELF" >&2
+        exit 1
+    fi
+    exit $?
+fi
 # Launched from an icon there is no terminal — keep a log instead.
 if [[ $NO_BROWSER -eq 0 ]]; then
     exec >>"$LOG_DIR/launcher.log" 2>&1
@@ -92,7 +119,23 @@ BROWSER="$(command -v chromium-browser || command -v chromium)" || {
     echo "chromium not found" >&2
     exit 1
 }
-TOUCH_WIDTH="${TOUCH_WIDTH:-1024}"
+
+if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
+    captureos_resolve_display_layout || exit 1
+else
+    CAPTUREOS_BOOTH_X=0
+    CAPTUREOS_BOOTH_Y=0
+    CAPTUREOS_BOOTH_W="${TOUCH_WIDTH:-1024}"
+    CAPTUREOS_BOOTH_H="${TOUCH_HEIGHT:-600}"
+    CAPTUREOS_GALLERY_X="${TOUCH_WIDTH:-1024}"
+    CAPTUREOS_GALLERY_Y=0
+    CAPTUREOS_GALLERY_W="${GALLERY_WIDTH:-1920}"
+    CAPTUREOS_GALLERY_H="${GALLERY_HEIGHT:-1080}"
+fi
+
+echo "booth display:   ${CAPTUREOS_BOOTH_OUTPUT:-?} at ${CAPTUREOS_BOOTH_X},${CAPTUREOS_BOOTH_Y} ${CAPTUREOS_BOOTH_W}x${CAPTUREOS_BOOTH_H}"
+echo "gallery display: ${CAPTUREOS_GALLERY_OUTPUT:-?} at ${CAPTUREOS_GALLERY_X},${CAPTUREOS_GALLERY_Y} ${CAPTUREOS_GALLERY_W}x${CAPTUREOS_GALLERY_H}"
+
 KIOSK_FLAGS=(
     --kiosk
     --noerrdialogs
@@ -102,23 +145,36 @@ KIOSK_FLAGS=(
     --overscroll-history-navigation=0
     --pull-to-refresh=0
 )
+# --window-position is unreliable on Wayland; prefer X11 for multi-head kiosks.
+if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
+    CAPTUREOS_OZONE_PLATFORM=x11
+fi
+KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
 
-# Booth on the touchscreen (primary output, position 0,0).
-if ! pgrep -f 'captureos-profile-booth' >/dev/null; then
+launch_kiosk() {
+    local profile="$1" url="$2" x="$3" y="$4" w="$5" h="$6"
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
-        --user-data-dir="$LOG_DIR/captureos-profile-booth" \
-        --window-position=0,0 \
-        "$BASE_URL/#/" &
+        --user-data-dir="$LOG_DIR/captureos-profile-${profile}" \
+        --window-position="${x},${y}" \
+        --window-size="${w},${h}" \
+        "$url" &
+}
+
+# Booth on the touchscreen (usually the smaller secondary display).
+if ! pgrep -f 'captureos-profile-booth' >/dev/null; then
+    launch_kiosk booth "$BASE_URL/#/" \
+        "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
     echo "booth kiosk launched"
 fi
 
-# Gallery on the wall display, placed right of the touchscreen.
+# Gallery on the wall / main display.
 if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]] \
     && ! pgrep -f 'captureos-profile-gallery' >/dev/null; then
-    "$BROWSER" "${KIOSK_FLAGS[@]}" \
-        --user-data-dir="$LOG_DIR/captureos-profile-gallery" \
-        --window-position="$TOUCH_WIDTH,0" \
-        "$BASE_URL/#/gallery" &
+    sleep 1
+    launch_kiosk gallery "$BASE_URL/#/gallery" \
+        "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
+        "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H"
     echo "gallery kiosk launched"
 fi
 

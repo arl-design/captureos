@@ -55,9 +55,15 @@ chown -R captureos:captureos "$APP_DIR/data"
 
 echo "==> Installing launcher, icon, and desktop entry"
 install -m 755 "$REPO_DIR/deploy/kiosk/captureos-launch.sh" "$APP_DIR/captureos-launch.sh"
+install -m 644 "$REPO_DIR/deploy/kiosk/display-layout.sh" "$APP_DIR/display-layout.sh"
 install -m 644 "$REPO_DIR/deploy/desktop/captureos-icon.png" "$APP_DIR/captureos-icon.png"
 install -m 644 "$REPO_DIR/deploy/desktop/captureos.desktop" \
     /usr/share/applications/captureos.desktop
+install -d -m 755 /etc/captureos
+if [[ ! -f /etc/captureos/display.conf ]]; then
+    install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
+        /etc/captureos/display.conf
+fi
 
 # A terminal command that always works, even if a Desktop icon doesn't show
 # (headless/Lite, renamed Desktop folder, or a file manager that refuses
