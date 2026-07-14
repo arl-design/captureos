@@ -61,33 +61,62 @@ from pathlib import Path
 
 rc_path, device, map_output = sys.argv[1:4]
 path = Path(rc_path)
-ns = {"ob": "http://openbox.org/3.4/rc"}
+ns = "{http://openbox.org/3.4/rc}"
+# Keep <touch .../> instead of <ns0:touch .../> — labwc reads plain names.
+ET.register_namespace("", "http://openbox.org/3.4/rc")
 
 if path.is_file():
     tree = ET.parse(path)
     root = tree.getroot()
 else:
-    root = ET.Element("{http://openbox.org/3.4/rc}openbox_config")
+    root = ET.Element(f"{ns}openbox_config")
     tree = ET.ElementTree(root)
 
-# Remove prior CaptureOS touch entries and any duplicate device mapping.
-for touch in list(root.findall("ob:touch", ns) or root.findall("touch")):
-    tag = touch.tag.split("}", 1)[-1]
-    if tag != "touch":
+
+def attr(el, name):
+    return el.get(name) or el.get(f"{ns}{name}")
+
+
+changed = False
+existing = None
+for touch in list(root):
+    if touch.tag.split("}", 1)[-1] != "touch":
         continue
-    if touch.get("deviceName") == device or touch.get("{http://openbox.org/3.4/rc}deviceName") == device:
-        root.remove(touch)
+    if attr(touch, "deviceName") == device:
+        if existing is None:
+            existing = touch
+        else:
+            root.remove(touch)  # duplicate entry
+            changed = True
 
-touch = ET.SubElement(root, "{http://openbox.org/3.4/rc}touch")
-touch.set("deviceName", device)
-touch.set("mapToOutput", map_output)
-touch.set("mouseEmulation", "yes")
+if existing is not None:
+    # Only correct the output mapping. Everything else (multitouch vs
+    # mouse emulation etc.) is the user's Screen Configuration choice —
+    # never override it, that caused "settings reset every reboot".
+    if attr(existing, "mapToOutput") != map_output:
+        existing.set("mapToOutput", map_output)
+        changed = True
+else:
+    touch = ET.SubElement(root, f"{ns}touch")
+    touch.set("deviceName", device)
+    touch.set("mapToOutput", map_output)
+    # Multitouch (no mouse emulation) — matches the Screen Configuration
+    # setting that works with the CaptureOS dual-screen kiosk.
+    touch.set("mouseEmulation", "no")
+    changed = True
 
-tree.write(path, encoding="unicode", xml_declaration=True)
-print(f"CaptureOS: labwc touch '{device}' -> {map_output} ({path})")
+if changed:
+    tree.write(path, encoding="unicode", xml_declaration=True)
+    print(f"CaptureOS: labwc touch '{device}' -> {map_output} ({path})")
+else:
+    print(f"CaptureOS: labwc touch '{device}' already -> {map_output}")
+sys.exit(0 if changed else 3)
 PY
+    local rc_status=$?
 
-    if command -v labwc >/dev/null 2>&1; then
+    # Only poke labwc when the config actually changed — reconfiguring
+    # mid-launch can disturb freshly-placed kiosk windows.
+    if [[ $rc_status -eq 0 ]] && command -v labwc >/dev/null 2>&1; then
         labwc --reconfigure 2>/dev/null || pkill -HUP labwc 2>/dev/null || true
     fi
     return 0

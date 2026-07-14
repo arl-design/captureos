@@ -129,7 +129,8 @@ captureos_write_kanshi_config() {
     gallery_rate="${CAPTUREOS_GALLERY_RATE:-60}"
     booth_rate="${CAPTUREOS_BOOTH_RATE:-60}"
 
-    cat >"$kanshi_file" <<EOF
+    local content
+    content="$(cat <<EOF
 # CaptureOS dual-display profile (auto-generated — do not edit by hand;
 # adjust /etc/captureos/display.conf and re-run setup-displays.sh).
 profile {
@@ -137,6 +138,13 @@ profile {
     output ${booth_out} enable mode ${booth_mode}@${booth_rate} position ${CAPTUREOS_BOOTH_X:-0},${CAPTUREOS_BOOTH_Y:-0} transform normal
 }
 EOF
+)"
+    # Leave the file alone when it already matches — rewriting (and HUPing
+    # kanshi) mid-session can shuffle windows around.
+    if [[ -f "$kanshi_file" ]] && [[ "$(cat "$kanshi_file")" == "$content" ]]; then
+        return 0
+    fi
+    printf '%s\n' "$content" >"$kanshi_file"
     echo "CaptureOS: wrote kanshi profile to $kanshi_file"
 
     if pgrep -x kanshi >/dev/null 2>&1; then

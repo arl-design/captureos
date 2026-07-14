@@ -70,6 +70,7 @@ function TapFocusPreview({
 }) {
   const ref = useRef<HTMLImageElement>(null);
   const [ring, setRing] = useState<{ left: number; top: number; key: number } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const img = ref.current;
@@ -84,6 +85,12 @@ function TapFocusPreview({
     const timer = setTimeout(() => setRing(null), 1200);
     return () => clearTimeout(timer);
   }, [ring]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3500);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const img = ref.current;
@@ -103,7 +110,16 @@ function TapFocusPreview({
     const y = (py + (dispH - rect.height) / 2) / dispH;
     if (x < 0 || x > 1 || y < 0 || y > 1) return;
     setRing({ left: px, top: py, key: Date.now() });
-    api.focus(x, y).catch(() => {});
+    api
+      .focus(x, y)
+      .then((r) => {
+        // Fixed-focus modules (e.g. Camera Module V2 / IMX219) cannot
+        // refocus in software — focus is set by turning the lens ring.
+        if (r.af_supported === false) {
+          setNotice('Fixed-focus camera — turn the lens ring to adjust focus');
+        }
+      })
+      .catch(() => {});
   };
 
   return (
@@ -123,6 +139,7 @@ function TapFocusPreview({
           style={{ left: ring.left, top: ring.top }}
         />
       )}
+      {notice && <div className="focus-notice">{notice}</div>}
     </div>
   );
 }

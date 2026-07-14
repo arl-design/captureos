@@ -89,6 +89,24 @@ focus_window: tuple[float, float, float, float] | None = None
 af_supported: bool | None = None
 
 
+def detect_af_support() -> bool | None:
+    """Best-effort AF capability from the sensor model (fixed-focus modules
+    like the V2/IMX219 can't refocus in software)."""
+    if CAPTURE_BIN is None:
+        return None
+    try:
+        out = subprocess.run(
+            [CAPTURE_BIN, "--list-cameras"], capture_output=True, timeout=5
+        ).stdout.decode(errors="replace").lower()
+    except Exception:
+        return None
+    if any(s in out for s in ("imx708", "imx519", "64mp")):
+        return True
+    if any(s in out for s in ("imx219", "ov5647", "imx477", "imx296", "ov9281")):
+        return False
+    return None
+
+
 def get_focus_window() -> tuple[float, float, float, float] | None:
     with focus_lock:
         return focus_window
@@ -368,8 +386,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    global af_supported
     os.makedirs(PHOTOS_DIR, exist_ok=True)
     os.makedirs(THUMBS_DIR, exist_ok=True)
+    af_supported = detect_af_support()
+    logger.info("autofocus support: %s", af_supported)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"CaptureOS camera service on :{PORT} (camera={CAMERA_MODE})")
     logger.info("camera service started (mode=%s, port=%d)", CAMERA_MODE, PORT)

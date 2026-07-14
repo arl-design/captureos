@@ -31,7 +31,10 @@ export const api = {
   accept: (id: number) => post<Photo>('/accept', { id }),
   retake: (id: number) => post<{ ok: boolean }>('/retake', { id }),
   focus: (x: number, y: number) =>
-    post<{ ok: boolean; window: number[] | null }>('/focus', { x, y }),
+    post<{ ok: boolean; window: number[] | null; af_supported: boolean | null }>(
+      '/focus',
+      { x, y },
+    ),
   focusReset: () =>
     post<{ ok: boolean; window: null }>('/focus', { reset: true }),
 };
