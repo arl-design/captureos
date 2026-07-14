@@ -21,9 +21,9 @@ apt-get update -qq
 # nodejs package (22.x, required below for node:sqlite) bundles npm and
 # declares `Conflicts: npm`, so asking for both makes apt unsolvable.
 apt-get install -y -qq nginx nodejs python3-pil rpicam-apps-lite \
-    xinput x11-xserver-utils xdotool \
+    xinput x11-xserver-utils xdotool libinput-tools wlr-randr \
     chromium-browser 2>/dev/null ||
-    apt-get install -y -qq nginx nodejs python3-pil xinput x11-xserver-utils xdotool chromium
+    apt-get install -y -qq nginx nodejs python3-pil xinput x11-xserver-utils xdotool libinput-tools wlr-randr chromium
 
 # Ensure npm is available. NodeSource's nodejs bundles it; a distro nodejs
 # may not, in which case the standalone package is safe to install (no
@@ -58,6 +58,8 @@ echo "==> Installing launcher, icon, and desktop entry"
 install -m 755 "$REPO_DIR/deploy/kiosk/captureos-launch.sh" "$APP_DIR/captureos-launch.sh"
 install -m 755 "$REPO_DIR/deploy/kiosk/captureos-gui.sh" "$APP_DIR/captureos-gui.sh"
 install -m 644 "$REPO_DIR/deploy/kiosk/display-layout.sh" "$APP_DIR/display-layout.sh"
+install -m 644 "$REPO_DIR/deploy/kiosk/wayland-display.sh" "$APP_DIR/wayland-display.sh"
+install -m 755 "$REPO_DIR/deploy/kiosk/setup-displays.sh" "$APP_DIR/setup-displays.sh"
 install -m 755 "$REPO_DIR/deploy/kiosk/trust-desktop-icon.sh" "$APP_DIR/trust-desktop-icon.sh"
 install -m 755 "$REPO_DIR/deploy/kiosk/map-touch-input.sh" "$APP_DIR/map-touch-input.sh"
 install -m 644 "$REPO_DIR/deploy/kiosk/touch-input.sh" "$APP_DIR/touch-input.sh"
@@ -115,8 +117,9 @@ if [[ -n "$KIOSK_USER" ]]; then
             "$REPO_DIR/deploy/desktop/captureos-trust.desktop" \
             "$KIOSK_HOME/.config/autostart/captureos-trust.desktop"
         install -C -o "$KIOSK_USER" -g "$KIOSK_USER" -m 644 \
-            "$REPO_DIR/deploy/desktop/captureos-touch.desktop" \
-            "$KIOSK_HOME/.config/autostart/captureos-touch.desktop"
+            "$REPO_DIR/deploy/desktop/captureos-00-display.desktop" \
+            "$KIOSK_HOME/.config/autostart/captureos-00-display.desktop"
+        rm -f "$KIOSK_HOME/.config/autostart/captureos-touch.desktop"
 
         # Mark the Desktop icon trusted (needs the user's D-Bus session).
         KIOSK_UID="$(id -u "$KIOSK_USER")"

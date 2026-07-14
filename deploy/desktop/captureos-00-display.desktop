@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CaptureOS Display Setup
+Comment=Configure dual displays and touch mapping before booth launch
+Exec=/opt/captureos/setup-displays.sh
+Hidden=true
+NoDisplay=true
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

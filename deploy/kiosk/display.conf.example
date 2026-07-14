@@ -2,14 +2,24 @@
 # Copy to /etc/captureos/display.conf or ~/.config/captureos/display.conf
 # and uncomment/adjust after running:  captureos-launch.sh --list-displays
 #
-# Assign by output name (from xrandr):
-# CAPTUREOS_BOOTH_OUTPUT=HDMI-2
-# CAPTUREOS_GALLERY_OUTPUT=HDMI-1
+# CaptureOS applies this automatically on every boot — you should not need
+# to re-open Pi OS Screen Configuration after a reboot.
+#
+# Assign by output name (from wlr-randr or xrandr):
+# CAPTUREOS_BOOTH_OUTPUT=HDMI-A-2
+# CAPTUREOS_GALLERY_OUTPUT=HDMI-A-1
+#
+# xrandr-style names also work (HDMI-1, HDMI-2).
 #
 # Or assign by pixel geometry (x,y,width,height):
 # CAPTUREOS_BOOTH_GEOM=1920,0,1024,600
 # CAPTUREOS_GALLERY_GEOM=0,0,1920,1080
 #
-# If touch taps hit the wrong screen, set the touch device explicitly:
-# CAPTUREOS_TOUCH_DEVICE="ILITEK ILITEK-TP"
+# Touch mapping (if auto-detect picks the wrong device):
+# CAPTUREOS_TOUCH_DEVICE="ILITEK ILITEK-TP"       # xinput name
 # CAPTUREOS_TOUCH_DEVICE_ID=8
+# CAPTUREOS_TOUCH_LIBINPUT="10-0038 generic ft5x06 (79)"  # libinput name (Wayland)
+#
+# Set to 0 to leave Pi OS kanshi / labwc touch config untouched:
+# CAPTUREOS_MANAGE_KANSHI=1
+# CAPTUREOS_MANAGE_LABWC_TOUCH=1

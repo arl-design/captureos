@@ -138,11 +138,24 @@ captureos_apply_display_entry() {
 captureos_resolve_display_layout() {
     captureos_load_display_config
 
-    if captureos_collect_xrandr_displays; then
+    local use_wlr=0
+    if [[ "${CAPTUREOS_DISPLAY_BACKEND:-}" == "wlr-randr" ]]; then
+        use_wlr=1
+    elif declare -F captureos_is_wayland_session >/dev/null 2>&1 \
+        && captureos_is_wayland_session \
+        && declare -F captureos_collect_wlr_displays >/dev/null 2>&1 \
+        && captureos_collect_wlr_displays; then
+        use_wlr=1
+        CAPTUREOS_DISPLAY_BACKEND=wlr-randr
+    fi
+
+    if (( use_wlr == 1 )); then
+        :
+    elif captureos_collect_xrandr_displays; then
         CAPTUREOS_DISPLAY_BACKEND=xrandr
     else
         CAPTUREOS_DISPLAY_BACKEND=none
-        echo "CaptureOS: xrandr unavailable — using legacy TOUCH_WIDTH positioning" >&2
+        echo "CaptureOS: no display backend — using legacy TOUCH_WIDTH positioning" >&2
         CAPTUREOS_BOOTH_X=0
         CAPTUREOS_BOOTH_Y=0
         CAPTUREOS_BOOTH_W="${TOUCH_WIDTH:-1024}"
@@ -166,8 +179,17 @@ captureos_resolve_display_layout() {
         CAPTUREOS_BOOTH_OUTPUT="${CAPTUREOS_BOOTH_OUTPUT:-manual}"
     elif [[ -n "${CAPTUREOS_BOOTH_OUTPUT:-}" ]]; then
         captureos_lookup_display "$CAPTUREOS_BOOTH_OUTPUT" || {
-            echo "CaptureOS: unknown booth output '$CAPTUREOS_BOOTH_OUTPUT'" >&2
-            return 1
+            # Allow xrandr-style names when using wlr-randr backend.
+            if [[ "${CAPTUREOS_DISPLAY_BACKEND:-}" == "wlr-randr" ]] \
+                && declare -F captureos_to_wlr_output >/dev/null 2>&1; then
+                captureos_lookup_display "$(captureos_to_wlr_output "$CAPTUREOS_BOOTH_OUTPUT")" || {
+                    echo "CaptureOS: unknown booth output '$CAPTUREOS_BOOTH_OUTPUT'" >&2
+                    return 1
+                }
+            else
+                echo "CaptureOS: unknown booth output '$CAPTUREOS_BOOTH_OUTPUT'" >&2
+                return 1
+            fi
         }
         CAPTUREOS_BOOTH_OUTPUT="$CAPTUREOS_RESOLVED_NAME"
         CAPTUREOS_BOOTH_X="$CAPTUREOS_RESOLVED_X"
@@ -188,8 +210,16 @@ captureos_resolve_display_layout() {
         CAPTUREOS_GALLERY_OUTPUT="${CAPTUREOS_GALLERY_OUTPUT:-manual}"
     elif [[ -n "${CAPTUREOS_GALLERY_OUTPUT:-}" ]]; then
         captureos_lookup_display "$CAPTUREOS_GALLERY_OUTPUT" || {
-            echo "CaptureOS: unknown gallery output '$CAPTUREOS_GALLERY_OUTPUT'" >&2
-            return 1
+            if [[ "${CAPTUREOS_DISPLAY_BACKEND:-}" == "wlr-randr" ]] \
+                && declare -F captureos_to_wlr_output >/dev/null 2>&1; then
+                captureos_lookup_display "$(captureos_to_wlr_output "$CAPTUREOS_GALLERY_OUTPUT")" || {
+                    echo "CaptureOS: unknown gallery output '$CAPTUREOS_GALLERY_OUTPUT'" >&2
+                    return 1
+                }
+            else
+                echo "CaptureOS: unknown gallery output '$CAPTUREOS_GALLERY_OUTPUT'" >&2
+                return 1
+            fi
         }
         CAPTUREOS_GALLERY_OUTPUT="$CAPTUREOS_RESOLVED_NAME"
         CAPTUREOS_GALLERY_X="$CAPTUREOS_RESOLVED_X"

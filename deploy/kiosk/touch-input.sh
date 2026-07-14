@@ -4,6 +4,94 @@
 # Override in display.conf:
 #   CAPTUREOS_TOUCH_DEVICE="ILITEK ILITEK-TP"
 #   CAPTUREOS_TOUCH_DEVICE_ID=8
+#   CAPTUREOS_TOUCH_LIBINPUT="10-0038 generic ft5x06 (79)"
+
+captureos_list_libinput_touch_devices() {
+    command -v libinput >/dev/null 2>&1 || return 1
+    local block="" name
+    while IFS= read -r line; do
+        if [[ "$line" == "Device:"* ]]; then
+            if [[ -n "$block" ]] && [[ "$block" == *"Capabilities:"*"touch"* ]]; then
+                name="${block#Device:}"
+                name="${name%%$'\n'*}"
+                name="${name#"${name%%[![:space:]]*}"}"
+                name="${name%"${name##*[![:space:]]}"}"
+                [[ -n "$name" ]] && printf '%s\n' "$name"
+            fi
+            block="$line"
+            continue
+        fi
+        block+=$'\n'"$line"
+    done < <(libinput list-devices 2>/dev/null)
+    if [[ -n "$block" ]] && [[ "$block" == *"Capabilities:"*"touch"* ]]; then
+        name="${block#Device:}"
+        name="${name%%$'\n'*}"
+        name="${name#"${name%%[![:space:]]*}"}"
+        name="${name%"${name##*[![:space:]]}"}"
+        [[ -n "$name" ]] && printf '%s\n' "$name"
+    fi
+}
+
+# Persist touch -> booth mapping in labwc rc.xml (Pi OS Wayland).
+captureos_apply_labwc_touch() {
+    local output="$1" device="${2:-}"
+    [[ -n "$output" ]] || return 1
+    [[ "${CAPTUREOS_MANAGE_LABWC_TOUCH:-1}" == "1" ]] || return 0
+
+    if [[ -z "$device" ]]; then
+        if [[ -n "${CAPTUREOS_TOUCH_LIBINPUT:-}" ]]; then
+            device="$CAPTUREOS_TOUCH_LIBINPUT"
+        else
+            device="$(captureos_list_libinput_touch_devices | head -1)"
+        fi
+    fi
+    [[ -n "$device" ]] || return 1
+
+    if declare -F captureos_to_wlr_output >/dev/null 2>&1; then
+        output="$(captureos_to_wlr_output "$output")"
+    fi
+
+    local rc="${XDG_CONFIG_HOME:-$HOME/.config}/labwc/rc.xml"
+    mkdir -p "$(dirname "$rc")"
+
+    python3 - "$rc" "$device" "$output" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+rc_path, device, map_output = sys.argv[1:4]
+path = Path(rc_path)
+ns = {"ob": "http://openbox.org/3.4/rc"}
+
+if path.is_file():
+    tree = ET.parse(path)
+    root = tree.getroot()
+else:
+    root = ET.Element("{http://openbox.org/3.4/rc}openbox_config")
+    tree = ET.ElementTree(root)
+
+# Remove prior CaptureOS touch entries and any duplicate device mapping.
+for touch in list(root.findall("ob:touch", ns) or root.findall("touch")):
+    tag = touch.tag.split("}", 1)[-1]
+    if tag != "touch":
+        continue
+    if touch.get("deviceName") == device or touch.get("{http://openbox.org/3.4/rc}deviceName") == device:
+        root.remove(touch)
+
+touch = ET.SubElement(root, "{http://openbox.org/3.4/rc}touch")
+touch.set("deviceName", device)
+touch.set("mapToOutput", map_output)
+touch.set("mouseEmulation", "yes")
+
+tree.write(path, encoding="unicode", xml_declaration=True)
+print(f"CaptureOS: labwc touch '{device}' -> {map_output} ({path})")
+PY
+
+    if command -v labwc >/dev/null 2>&1; then
+        labwc --reconfigure 2>/dev/null || pkill -HUP labwc 2>/dev/null || true
+    fi
+    return 0
+}
 
 captureos_list_touch_devices() {
     command -v xinput >/dev/null 2>&1 || return 1
@@ -53,34 +141,41 @@ captureos_map_touch_to_booth() {
     export DISPLAY="${DISPLAY:-:0}"
     export XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
 
-    if ! command -v xinput >/dev/null 2>&1; then
-        echo "CaptureOS: xinput not installed — touch may hit the wrong screen" >&2
-        return 1
-    fi
-    if ! xrandr --query 2>/dev/null | grep -q "^${output} connected"; then
-        echo "CaptureOS: booth output '$output' is not connected" >&2
-        return 1
+    local mapped=0
+
+    if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
+        && captureos_is_wayland_session \
+        && declare -F captureos_apply_labwc_touch >/dev/null 2>&1; then
+        captureos_apply_labwc_touch "$output" "${CAPTUREOS_TOUCH_LIBINPUT:-}" && mapped=1
     fi
 
-    local mapped=0 id name entry
-    if [[ -n "${CAPTUREOS_TOUCH_DEVICE_ID:-}" ]]; then
-        if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE_ID" "$output" 2>/dev/null; then
-            echo "CaptureOS: mapped touch id ${CAPTUREOS_TOUCH_DEVICE_ID} -> ${output}"
-            mapped=1
+    if command -v xinput >/dev/null 2>&1; then
+        local xoutput="$output"
+        if declare -F captureos_to_xrandr_output >/dev/null 2>&1; then
+            xoutput="$(captureos_to_xrandr_output "$output")"
         fi
-    elif [[ -n "${CAPTUREOS_TOUCH_DEVICE:-}" ]]; then
-        if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE" "$output" 2>/dev/null; then
-            echo "CaptureOS: mapped touch '${CAPTUREOS_TOUCH_DEVICE}' -> ${output}"
-            mapped=1
-        fi
-    else
-        while IFS=$'\t' read -r id name; do
-            [[ -n "$id" ]] || continue
-            if xinput map-to-output "$id" "$output" 2>/dev/null; then
-                echo "CaptureOS: mapped touch '${name}' (id ${id}) -> ${output}"
-                mapped=1
+        if xrandr --query 2>/dev/null | grep -q "^${xoutput} connected"; then
+            local id name
+            if [[ -n "${CAPTUREOS_TOUCH_DEVICE_ID:-}" ]]; then
+                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE_ID" "$xoutput" 2>/dev/null; then
+                    echo "CaptureOS: mapped touch id ${CAPTUREOS_TOUCH_DEVICE_ID} -> ${xoutput}"
+                    mapped=1
+                fi
+            elif [[ -n "${CAPTUREOS_TOUCH_DEVICE:-}" ]]; then
+                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE" "$xoutput" 2>/dev/null; then
+                    echo "CaptureOS: mapped touch '${CAPTUREOS_TOUCH_DEVICE}' -> ${xoutput}"
+                    mapped=1
+                fi
+            else
+                while IFS=$'\t' read -r id name; do
+                    [[ -n "$id" ]] || continue
+                    if xinput map-to-output "$id" "$xoutput" 2>/dev/null; then
+                        echo "CaptureOS: mapped touch '${name}' (id ${id}) -> ${xoutput}"
+                        mapped=1
+                    fi
+                done < <(captureos_list_touch_devices)
             fi
-        done < <(captureos_list_touch_devices)
+        fi
     fi
 
     if (( mapped == 0 )); then
@@ -104,6 +199,15 @@ captureos_print_inputs() {
         printf '  id=%-3s  %s\n' "$id" "$name"
     done < <(captureos_list_touch_devices)
 
+    if command -v libinput >/dev/null 2>&1; then
+        echo
+        echo "Touch devices (via libinput — use for labwc / Screen Configuration):"
+        local dev
+        while IFS= read -r dev; do
+            [[ -n "$dev" ]] && printf '  %s\n' "$dev"
+        done < <(captureos_list_libinput_touch_devices)
+    fi
+
     if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
         captureos_resolve_display_layout 2>/dev/null || true
     fi
@@ -113,4 +217,5 @@ captureos_print_inputs() {
     echo "To override, add to ~/.config/captureos/display.conf:"
     echo '  CAPTUREOS_TOUCH_DEVICE="device name from above"'
     echo "  # or: CAPTUREOS_TOUCH_DEVICE_ID=8"
+    echo '  # Wayland/labwc: CAPTUREOS_TOUCH_LIBINPUT="libinput device name"'
 }

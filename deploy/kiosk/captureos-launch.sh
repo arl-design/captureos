@@ -45,6 +45,7 @@ mkdir -p "$LOG_DIR"
 
 LAYOUT_SH="$(dirname "$SELF")/display-layout.sh"
 TOUCH_SH="$(dirname "$SELF")/touch-input.sh"
+WAYLAND_SH="$(dirname "$SELF")/wayland-display.sh"
 WINPOS_SH="$(dirname "$SELF")/window-position.sh"
 if [[ -f "$LAYOUT_SH" ]]; then
     # shellcheck source=display-layout.sh
@@ -53,6 +54,10 @@ fi
 if [[ -f "$TOUCH_SH" ]]; then
     # shellcheck source=touch-input.sh
     source "$TOUCH_SH"
+fi
+if [[ -f "$WAYLAND_SH" ]]; then
+    # shellcheck source=wayland-display.sh
+    source "$WAYLAND_SH"
 fi
 if [[ -f "$WINPOS_SH" ]]; then
     # shellcheck source=window-position.sh
@@ -225,6 +230,13 @@ if declare -F captureos_wait_for_displays >/dev/null 2>&1; then
     captureos_wait_for_displays 2 || true
 fi
 
+# Re-apply dual-display + touch (Screen Configuration often resets on reboot).
+if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
+    && captureos_is_wayland_session \
+    && declare -F captureos_setup_wayland_displays >/dev/null 2>&1; then
+    captureos_setup_wayland_displays || true
+fi
+
 if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
     captureos_resolve_display_layout || exit 1
 else
@@ -308,6 +320,9 @@ fi
 
 if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
     captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true
+    # Touch USB can enumerate after the compositor starts — retry briefly.
+    ( sleep 5
+      captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true ) &
 fi
 
 disown -a 2>/dev/null || true
