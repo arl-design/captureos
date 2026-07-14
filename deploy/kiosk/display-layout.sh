@@ -80,19 +80,25 @@ captureos_parse_geom() {
     fi
 }
 
-# Heuristic: gallery on the main / wall display (largest panel), booth on
-# the touchscreen (the other panel — usually smaller, e.g. 1024x600).
+# Heuristic: gallery on the main / wall display (primary if set, else largest),
+# booth on the other panel (usually the 1024x600 touchscreen).
 captureos_auto_assign_displays() {
     local entry name w h x y primary area best_booth="" best_gallery=""
-    local booth_area=999999999 gallery_area=0
+    local primary_entry="" booth_area=999999999 gallery_area=0
     for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
         IFS='|' read -r name w h x y primary <<<"$entry"
         area=$((w * h))
+        if [[ "$primary" == 1 ]]; then
+            primary_entry="$entry"
+        fi
         if (( area > gallery_area )); then
             gallery_area=$area
             best_gallery="$entry"
         fi
     done
+    if [[ -n "$primary_entry" ]]; then
+        best_gallery="$primary_entry"
+    fi
     for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
         IFS='|' read -r name w h x y primary <<<"$entry"
         [[ "$entry" == "$best_gallery" ]] && continue
@@ -102,7 +108,13 @@ captureos_auto_assign_displays() {
             best_booth="$entry"
         fi
     done
-    # Single monitor: both share the same screen.
+    if [[ -z "$best_booth" ]]; then
+        for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
+            [[ "$entry" == "$best_gallery" ]] && continue
+            best_booth="$entry"
+            break
+        done
+    fi
     if [[ -z "$best_booth" ]]; then
         best_booth="$best_gallery"
     fi
@@ -208,7 +220,7 @@ captureos_print_displays() {
     echo
     IFS='|' read -r _ bw bh bx by _ <<<"$CAPTUREOS_AUTO_BOOTH"
     IFS='|' read -r _ gw gh gx gy _ <<<"$CAPTUREOS_AUTO_GALLERY"
-    echo "Auto-assignment (largest -> gallery, other/smallest -> booth):"
+    echo "Auto-assignment (primary/largest -> gallery, other -> booth):"
     echo "  Booth:   ${CAPTUREOS_AUTO_BOOTH%%|*}  ->  ${bx},${by} ${bw}x${bh}"
     echo "  Gallery: ${CAPTUREOS_AUTO_GALLERY%%|*}  ->  ${gx},${gy} ${gw}x${gh}"
     echo

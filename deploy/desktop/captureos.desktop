@@ -3,7 +3,7 @@ Version=1.0
 Type=Application
 Name=CaptureOS Photo Booth
 Comment=Start the LEGO MiniFigure Photo Booth
-Exec=/usr/local/bin/captureos
+Exec=sh -c 'DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority /usr/local/bin/captureos'
 Icon=/opt/captureos/captureos-icon.png
 Terminal=false
 Categories=AudioVideo;Photography;

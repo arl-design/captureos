@@ -21,7 +21,8 @@
 # largest other -> gallery). Override in ~/.config/captureos/display.conf:
 #   CAPTUREOS_BOOTH_OUTPUT=HDMI-2
 #   CAPTUREOS_GALLERY_OUTPUT=HDMI-1
-# Run with --list-displays to see output names on your Pi.
+# Run `captureos-launch.sh --list-displays` to see output names on your Pi.
+# If both windows open on one monitor, set outputs in display.conf (see example).
 
 set -uo pipefail
 
@@ -41,6 +42,7 @@ mkdir -p "$LOG_DIR"
 
 LAYOUT_SH="$(dirname "$SELF")/display-layout.sh"
 TOUCH_SH="$(dirname "$SELF")/touch-input.sh"
+WINPOS_SH="$(dirname "$SELF")/window-position.sh"
 if [[ -f "$LAYOUT_SH" ]]; then
     # shellcheck source=display-layout.sh
     source "$LAYOUT_SH"
@@ -48,6 +50,10 @@ fi
 if [[ -f "$TOUCH_SH" ]]; then
     # shellcheck source=touch-input.sh
     source "$TOUCH_SH"
+fi
+if [[ -f "$WINPOS_SH" ]]; then
+    # shellcheck source=window-position.sh
+    source "$WINPOS_SH"
 fi
 
 NO_BROWSER=0
@@ -139,6 +145,13 @@ BROWSER="$(command -v chromium-browser || command -v chromium)" || {
     exit 1
 }
 
+if declare -F captureos_ensure_x_display >/dev/null 2>&1; then
+    captureos_ensure_x_display || true
+fi
+if declare -F captureos_wait_for_displays >/dev/null 2>&1; then
+    captureos_wait_for_displays 2 || true
+fi
+
 if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
     captureos_resolve_display_layout || exit 1
 else
@@ -152,11 +165,16 @@ else
     CAPTUREOS_GALLERY_H="${GALLERY_HEIGHT:-1080}"
 fi
 
+if declare -F captureos_arrange_extended_desktop >/dev/null 2>&1; then
+    captureos_arrange_extended_desktop || true
+    captureos_resolve_display_layout || true
+fi
+
 echo "booth display:   ${CAPTUREOS_BOOTH_OUTPUT:-?} at ${CAPTUREOS_BOOTH_X},${CAPTUREOS_BOOTH_Y} ${CAPTUREOS_BOOTH_W}x${CAPTUREOS_BOOTH_H}"
 echo "gallery display: ${CAPTUREOS_GALLERY_OUTPUT:-?} at ${CAPTUREOS_GALLERY_X},${CAPTUREOS_GALLERY_Y} ${CAPTUREOS_GALLERY_W}x${CAPTUREOS_GALLERY_H}"
 
-if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
-    captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true
+if declare -F captureos_kill_kiosk_windows >/dev/null 2>&1; then
+    captureos_kill_kiosk_windows
 fi
 
 KIOSK_FLAGS=(
@@ -168,39 +186,51 @@ KIOSK_FLAGS=(
     --overscroll-history-navigation=0
     --pull-to-refresh=0
 )
-# --window-position is unreliable on Wayland; prefer X11 for multi-head kiosks.
+# Prefer X11 so --window-position and xdotool can place windows on dual HDMI.
 if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
     CAPTUREOS_OZONE_PLATFORM=x11
 fi
 KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
 
 launch_kiosk() {
-    local profile="$1" url="$2" x="$3" y="$4" w="$5" h="$6"
+    local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
+        --class="$class" \
         --user-data-dir="$LOG_DIR/captureos-profile-${profile}" \
         --window-position="${x},${y}" \
         --window-size="${w},${h}" \
         "$url" &
 }
 
-# Gallery on the wall / main display — launch FIRST. Chromium's first kiosk
-# window tends to attach to the primary monitor, so starting the gallery
-# before the booth keeps the booth UI on the touchscreen.
-if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]] \
-    && ! pgrep -f 'captureos-profile-gallery' >/dev/null; then
-    launch_kiosk gallery "$BASE_URL/#/gallery" \
+# Gallery on the wall / main display.
+if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+    launch_kiosk gallery CaptureOS-Gallery "$BASE_URL/#/gallery" \
         "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
         "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H"
     echo "gallery kiosk launched"
 fi
 
-# Booth on the touchscreen — launch second so it lands on the other display.
-if ! pgrep -f 'captureos-profile-booth' >/dev/null; then
-    sleep 1
-    launch_kiosk booth "$BASE_URL/#/" \
+# Booth on the touchscreen.
+launch_kiosk booth CaptureOS-Booth "$BASE_URL/#/" \
+    "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+    "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
+echo "booth kiosk launched"
+
+sleep 2
+
+if declare -F captureos_position_window_class >/dev/null 2>&1; then
+    if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+        captureos_position_window_class CaptureOS-Gallery \
+            "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
+            "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" || true
+    fi
+    captureos_position_window_class CaptureOS-Booth \
         "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
-        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
-    echo "booth kiosk launched"
+        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" || true
+fi
+
+if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
+    captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true
 fi
 
 disown -a 2>/dev/null || true

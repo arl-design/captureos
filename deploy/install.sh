@@ -21,9 +21,9 @@ apt-get update -qq
 # nodejs package (22.x, required below for node:sqlite) bundles npm and
 # declares `Conflicts: npm`, so asking for both makes apt unsolvable.
 apt-get install -y -qq nginx nodejs python3-pil rpicam-apps-lite \
-    xinput x11-xserver-utils \
+    xinput x11-xserver-utils xdotool \
     chromium-browser 2>/dev/null ||
-    apt-get install -y -qq nginx nodejs python3-pil xinput x11-xserver-utils chromium
+    apt-get install -y -qq nginx nodejs python3-pil xinput x11-xserver-utils xdotool chromium
 
 # Ensure npm is available. NodeSource's nodejs bundles it; a distro nodejs
 # may not, in which case the standalone package is safe to install (no
@@ -60,6 +60,7 @@ install -m 644 "$REPO_DIR/deploy/kiosk/display-layout.sh" "$APP_DIR/display-layo
 install -m 755 "$REPO_DIR/deploy/kiosk/trust-desktop-icon.sh" "$APP_DIR/trust-desktop-icon.sh"
 install -m 755 "$REPO_DIR/deploy/kiosk/map-touch-input.sh" "$APP_DIR/map-touch-input.sh"
 install -m 644 "$REPO_DIR/deploy/kiosk/touch-input.sh" "$APP_DIR/touch-input.sh"
+install -m 644 "$REPO_DIR/deploy/kiosk/window-position.sh" "$APP_DIR/window-position.sh"
 install -m 644 "$REPO_DIR/deploy/desktop/captureos-icon.png" "$APP_DIR/captureos-icon.png"
 install -m 644 "$REPO_DIR/deploy/desktop/captureos.desktop" \
     /usr/share/applications/captureos.desktop
