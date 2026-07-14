@@ -17,9 +17,17 @@ fi
 
 echo "==> Installing OS packages"
 apt-get update -qq
-apt-get install -y -qq nginx nodejs npm python3-pil rpicam-apps-lite \
+# Note: do NOT request the standalone `npm` package here. The NodeSource
+# nodejs package (22.x, required below for node:sqlite) bundles npm and
+# declares `Conflicts: npm`, so asking for both makes apt unsolvable.
+apt-get install -y -qq nginx nodejs python3-pil rpicam-apps-lite \
     chromium-browser 2>/dev/null ||
-    apt-get install -y -qq nginx nodejs npm python3-pil chromium
+    apt-get install -y -qq nginx nodejs python3-pil chromium
+
+# Ensure npm is available. NodeSource's nodejs bundles it; a distro nodejs
+# may not, in which case the standalone package is safe to install (no
+# NodeSource nodejs is present to conflict with).
+command -v npm >/dev/null 2>&1 || apt-get install -y -qq npm
 
 NODE_MAJOR=$(node -e 'console.log(process.versions.node.split(".")[0])')
 if (( NODE_MAJOR < 22 )); then
