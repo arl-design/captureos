@@ -456,20 +456,23 @@ elif declare -F captureos_position_window_class >/dev/null 2>&1; then
 fi
 
 # Chromium sometimes drops fullscreen shortly after map — nudge again.
+# Remap touch AFTER fullscreen settles: mapping against the extended desktop
+# before the booth window is sized leaves taps offset (shutter too high).
 if declare -F captureos_fullscreen_window_class >/dev/null 2>&1; then
     ( sleep 4
       captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
       captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+      captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" 2>/dev/null || true
       sleep 3
       captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
       captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+      captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" 2>/dev/null || true
     ) 9>&- &
 fi
 
 if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
     captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true
-    # Touch USB can enumerate after the compositor starts — retry briefly.
-    ( sleep 5
+    ( sleep 8
       captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true ) 9>&- &
 fi
 

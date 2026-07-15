@@ -96,15 +96,18 @@ for touch in list(root):
     if touch.tag.split("}", 1)[-1] != "touch":
         continue
     name = attr(touch, "deviceName") or ""
-    # Drop stale USB-port variants and any entry for this panel that
-    # pointed at the wrong output (e.g. HDMI-A-2 when booth is HDMI-A-1).
-    if base_name(name) == want_base or name == device:
-        if existing is None and name == device:
+    mapped_to = attr(touch, "mapToOutput") or ""
+    # Drop stale USB-port variants, and any touch still aimed at a
+    # non-booth output (classic cause of "tap too low" on dual HDMI).
+    same_panel = base_name(name) == want_base or name == device
+    wrong_output = mapped_to and mapped_to != map_output
+    if same_panel or wrong_output:
+        if existing is None and name == device and not wrong_output:
             existing = touch
         else:
             root.remove(touch)
             changed = True
-            print(f"CaptureOS: removed stale touch entry '{name}'")
+            print(f"CaptureOS: removed stale touch entry '{name}' -> {mapped_to or '?'}")
 
 if existing is None:
     existing = ET.SubElement(root, f"{ns}touch")
@@ -192,7 +195,19 @@ captureos_map_touch_to_booth() {
     if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
         && captureos_is_wayland_session \
         && declare -F captureos_apply_labwc_touch >/dev/null 2>&1; then
-        captureos_apply_labwc_touch "$output" "${CAPTUREOS_TOUCH_LIBINPUT:-}" && mapped=1
+        # Map every currently connected panel-like libinput device to booth
+        # (USB path suffixes change between boots).
+        local libdev
+        if [[ -n "${CAPTUREOS_TOUCH_LIBINPUT:-}" ]]; then
+            captureos_apply_labwc_touch "$output" "$CAPTUREOS_TOUCH_LIBINPUT" && mapped=1
+        else
+            while IFS= read -r libdev; do
+                [[ -n "$libdev" ]] || continue
+                captureos_apply_labwc_touch "$output" "$libdev" && mapped=1
+            done < <(captureos_list_libinput_touch_devices)
+            # Fallback if libinput-tools missing.
+            (( mapped == 0 )) && captureos_apply_labwc_touch "$output" "" && mapped=1
+        fi
     fi
 
     if command -v xinput >/dev/null 2>&1; then
@@ -200,28 +215,48 @@ captureos_map_touch_to_booth() {
         if declare -F captureos_to_xrandr_output >/dev/null 2>&1; then
             xoutput="$(captureos_to_xrandr_output "$output")"
         fi
-        if xrandr --query 2>/dev/null | grep -q "^${xoutput} connected"; then
-            local id name
+        # Chromium uses ozone X11 — xinput map-to-output is required so
+        # taps are constrained to the booth panel instead of the whole
+        # extended desktop (which makes the shutter feel "too high").
+        local -a candidates=("$xoutput")
+        if [[ "$xoutput" == HDMI-A-* ]]; then
+            candidates+=("HDMI-${xoutput#HDMI-A-}")
+        elif [[ "$xoutput" == HDMI-* ]]; then
+            candidates+=("HDMI-A-${xoutput#HDMI-}")
+        fi
+        local try_out id name
+        for try_out in "${candidates[@]}"; do
+            xrandr --query 2>/dev/null | grep -q "^${try_out} connected" || continue
             if [[ -n "${CAPTUREOS_TOUCH_DEVICE_ID:-}" ]]; then
-                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE_ID" "$xoutput" 2>/dev/null; then
-                    echo "CaptureOS: mapped touch id ${CAPTUREOS_TOUCH_DEVICE_ID} -> ${xoutput}"
+                xinput set-prop "$CAPTUREOS_TOUCH_DEVICE_ID" \
+                    "Coordinate Transformation Matrix" \
+                    1 0 0 0 1 0 0 0 1 2>/dev/null || true
+                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE_ID" "$try_out" 2>/dev/null; then
+                    echo "CaptureOS: mapped touch id ${CAPTUREOS_TOUCH_DEVICE_ID} -> ${try_out}"
                     mapped=1
                 fi
             elif [[ -n "${CAPTUREOS_TOUCH_DEVICE:-}" ]]; then
-                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE" "$xoutput" 2>/dev/null; then
-                    echo "CaptureOS: mapped touch '${CAPTUREOS_TOUCH_DEVICE}' -> ${xoutput}"
+                xinput set-prop "$CAPTUREOS_TOUCH_DEVICE" \
+                    "Coordinate Transformation Matrix" \
+                    1 0 0 0 1 0 0 0 1 2>/dev/null || true
+                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE" "$try_out" 2>/dev/null; then
+                    echo "CaptureOS: mapped touch '${CAPTUREOS_TOUCH_DEVICE}' -> ${try_out}"
                     mapped=1
                 fi
             else
                 while IFS=$'\t' read -r id name; do
                     [[ -n "$id" ]] || continue
-                    if xinput map-to-output "$id" "$xoutput" 2>/dev/null; then
-                        echo "CaptureOS: mapped touch '${name}' (id ${id}) -> ${xoutput}"
+                    # Clear any stale matrix from a previous bad layout.
+                    xinput set-prop "$id" "Coordinate Transformation Matrix" \
+                        1 0 0 0 1 0 0 0 1 2>/dev/null || true
+                    if xinput map-to-output "$id" "$try_out" 2>/dev/null; then
+                        echo "CaptureOS: mapped touch '${name}' (id ${id}) -> ${try_out}"
                         mapped=1
                     fi
                 done < <(captureos_list_touch_devices)
             fi
-        fi
+            (( mapped == 1 )) && break
+        done
     fi
 
     if (( mapped == 0 )); then
