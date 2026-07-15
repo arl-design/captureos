@@ -330,6 +330,7 @@ captureos_print_displays() {
     echo "  CAPTUREOS_BOOTH_MODE=1024x600"
     echo "  CAPTUREOS_GALLERY_MODE=1920x1080"
     echo
-    echo "Or leave both unset and CaptureOS auto-picks smallest -> booth,"
-    echo "largest -> gallery."
+    echo "Or leave both unset and CaptureOS auto-picks:"
+    echo "  DSI/DPI panel -> booth (when present), else smallest panel;"
+    echo "  largest remaining panel -> gallery."
 }
