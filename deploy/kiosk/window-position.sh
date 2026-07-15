@@ -136,10 +136,17 @@ captureos_window_center() {
 captureos_fullscreen_window() {
     local wid="$1"
     [[ -n "$wid" ]] || return 1
+    # App-mode Chromium still shows a thin title strip until it is truly
+    # fullscreen. Prefer EWMH fullscreen; fall back to F11.
     if command -v wmctrl >/dev/null 2>&1; then
-        wmctrl -i -r "$wid" -b add,fullscreen 2>/dev/null && return 0
+        wmctrl -i -r "$wid" -b add,fullscreen 2>/dev/null || true
+        wmctrl -i -a "$wid" 2>/dev/null || true
     fi
-    xdotool windowstate --add FULLSCREEN "$wid" 2>/dev/null || return 1
+    xdotool windowactivate --sync "$wid" 2>/dev/null || true
+    xdotool windowstate --add FULLSCREEN "$wid" 2>/dev/null || true
+    # F11 is what actually hides remaining chrome on some Chromium builds.
+    xdotool key --window "$wid" F11 2>/dev/null || true
+    return 0
 }
 
 captureos_fullscreen_window_class() {

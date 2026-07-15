@@ -320,10 +320,11 @@ fi
 # windows that always open on the primary (big) display. Use an app window
 # with explicit size/position; labwc window rules force the right output
 # and fullscreen. (Optional CAPTUREOS_FORCE_KIOSK=1 restores old behaviour.)
-# With cursor-warp-before-launch, Chromium --kiosk maps fullscreen onto
-# the output under the cursor (labwc rule). That gives true kiosk chrome
-# (no tab/search bar) AND the correct screen. Set CAPTUREOS_FORCE_KIOSK=0
-# to fall back to app window + wmctrl fullscreen if needed.
+# Do NOT use Chromium --kiosk by default: under labwc it maps both
+# windows onto one screen and xdotool cannot move them. Hide the
+# tab/search bar with --app instead, then fullscreen via wmctrl after
+# the window is on the correct output. Set CAPTUREOS_FORCE_KIOSK=1 only
+# as a last resort (single-display booths).
 KIOSK_FLAGS=(
     --noerrdialogs
     --disable-infobars
@@ -336,11 +337,10 @@ KIOSK_FLAGS=(
     --no-first-run
     --disable-features=TranslateUI
     --disable-pinch
+    --start-maximized
 )
-if [[ "${CAPTUREOS_FORCE_KIOSK:-1}" == "1" ]]; then
+if [[ "${CAPTUREOS_FORCE_KIOSK:-0}" == "1" ]]; then
     KIOSK_FLAGS+=(--kiosk --kiosk-printing)
-else
-    KIOSK_FLAGS+=(--start-maximized)
 fi
 # Prefer X11 so --window-position and xdotool/wmctrl can place windows.
 if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
@@ -350,17 +350,24 @@ KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
 
 launch_kiosk() {
     local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
-    # Warp cursor onto the target output first — labwc maps new (kiosk)
-    # windows to the output under the cursor.
+    # Warp cursor onto the target output first — labwc maps new windows
+    # to the output under the cursor.
     if declare -F captureos_warp_cursor_to >/dev/null 2>&1; then
         captureos_warp_cursor_to "$x" "$y" "$w" "$h"
     fi
-    # --app hides the tab/search bar (true kiosk look). Keep --class for
-    # labwc / xdotool matching.
+    # Seed a minimal profile that never shows the bookmarks bar.
+    local profile_dir="$LOG_DIR/captureos-profile-${profile}"
+    mkdir -p "$profile_dir/Default"
+    local prefs="$profile_dir/Default/Preferences"
+    if [[ ! -f "$prefs" ]]; then
+        printf '%s\n' '{"bookmark_bar":{"show_on_all_tabs":false},"browser":{"custom_chrome_frame":false}}' >"$prefs"
+    fi
+    # --app hides the tab/search bar WITHOUT Chromium --kiosk (which
+    # breaks dual-display placement). Keep --class for labwc matching.
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
         --class="$class" \
         --name="$class" \
-        --user-data-dir="$LOG_DIR/captureos-profile-${profile}" \
+        --user-data-dir="$profile_dir" \
         --window-position="${x},${y}" \
         --window-size="${w},${h}" \
         --app="$url" \
@@ -373,8 +380,8 @@ if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
         "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
         "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H"
     echo "gallery kiosk launched"
-    # Let the window map under the gallery cursor before moving it.
-    sleep 2
+    # Let the kiosk surface map under the gallery cursor before moving on.
+    sleep 3
 fi
 
 # Booth on the touchscreen.
@@ -383,7 +390,7 @@ launch_kiosk booth CaptureOS-Booth "$BASE_URL/#/" \
     "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
 echo "booth kiosk launched"
 
-sleep 3
+sleep 4
 
 # Verify-and-retry placement: at boot Chromium starts before the second
 # monitor is fully arranged, so windows pile onto one screen. Keep
