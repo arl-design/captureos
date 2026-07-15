@@ -356,10 +356,12 @@ fi
 echo "chromium ozone platform: $CAPTUREOS_OZONE_PLATFORM"
 
 launch_kiosk() {
-    local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
+    local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7" output="${8:-}"
     # Warp cursor onto the target output first — labwc maps new windows
-    # to the output under the cursor.
-    if declare -F captureos_warp_cursor_to >/dev/null 2>&1; then
+    # to the output under the cursor when window rules do not match.
+    if declare -F captureos_warp_cursor_to_output >/dev/null 2>&1; then
+        captureos_warp_cursor_to_output "$output" "$x" "$y" "$w" "$h"
+    elif declare -F captureos_warp_cursor_to >/dev/null 2>&1; then
         captureos_warp_cursor_to "$x" "$y" "$w" "$h"
     fi
     # Seed a minimal profile that never shows the bookmarks bar.
@@ -371,12 +373,20 @@ launch_kiosk() {
     fi
     # --app hides the tab/search bar WITHOUT Chromium --kiosk (which
     # breaks dual-display placement). Keep --class for labwc matching.
+    local -a window_geom=()
+    # Native Wayland: let labwc window rules place/size windows. Chromium
+    # --window-position can pin both surfaces on one output before rules run.
+    if [[ "$CAPTUREOS_OZONE_PLATFORM" == "x11" ]]; then
+        window_geom=(
+            --window-position="${x},${y}"
+            --window-size="${w},${h}"
+        )
+    fi
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
         --class="$class" \
         --name="$class" \
         --user-data-dir="$profile_dir" \
-        --window-position="${x},${y}" \
-        --window-size="${w},${h}" \
+        "${window_geom[@]}" \
         --app="$url" \
         9>&- &
 }
@@ -385,7 +395,8 @@ launch_kiosk() {
 if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
     launch_kiosk gallery CaptureOS-Gallery "$BASE_URL/#/gallery" \
         "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
-        "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H"
+        "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" \
+        "${CAPTUREOS_GALLERY_OUTPUT:-}"
     echo "gallery kiosk launched"
     # Let the kiosk surface map under the gallery cursor before moving on.
     sleep 3
@@ -394,7 +405,8 @@ fi
 # Booth on the touchscreen.
 launch_kiosk booth CaptureOS-Booth "$BASE_URL/#/" \
     "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
-    "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
+    "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" \
+    "${CAPTUREOS_BOOTH_OUTPUT:-}"
 echo "booth kiosk launched"
 
 sleep 4

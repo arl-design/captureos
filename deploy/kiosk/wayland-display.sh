@@ -197,15 +197,62 @@ captureos_warp_cursor_to() {
     local x="${1:-0}" y="${2:-0}" w="${3:-100}" h="${4:-100}"
     local cx=$((x + w / 2)) cy=$((y + h / 2))
     echo "CaptureOS: warping cursor to ${cx},${cy}"
-    # Prefer absolute move via wl-click / ydotool if present later; xdotool
-    # moves the XWayland pointer which labwc still often uses for placement
-    # of X11 (ozone) Chromium windows.
+    captureos_warp_cursor_absolute "$cx" "$cy"
+}
+
+# Prefer output-aware warping on Wayland; fall back to desktop coords.
+captureos_warp_cursor_to_output() {
+    local output="${1:-}" x="${2:-0}" y="${3:-0}" w="${4:-100}" h="${5:-100}"
+    local cx=$((x + w / 2)) cy=$((y + h / 2))
+    if [[ -n "$output" ]] \
+        && declare -F captureos_is_wayland_session >/dev/null 2>&1 \
+        && captureos_is_wayland_session \
+        && command -v wlr-randr >/dev/null 2>&1; then
+        local wlr_out ox oy ow oh
+        wlr_out="$(captureos_to_wlr_output "$output")"
+        if captureos_lookup_wlr_output_rect "$wlr_out"; then
+            ox="$CAPTUREOS_WLR_OUT_X"
+            oy="$CAPTUREOS_WLR_OUT_Y"
+            ow="$CAPTUREOS_WLR_OUT_W"
+            oh="$CAPTUREOS_WLR_OUT_H"
+            cx=$((ox + ow / 2))
+            cy=$((oy + oh / 2))
+            echo "CaptureOS: warping cursor to output ${wlr_out} center ${cx},${cy}"
+            captureos_warp_cursor_absolute "$cx" "$cy"
+            return 0
+        fi
+    fi
+    captureos_warp_cursor_to "$x" "$y" "$w" "$h"
+}
+
+captureos_lookup_wlr_output_rect() {
+    local want="$1" entry name w h x y primary rate
+    CAPTUREOS_WLR_OUT_X=""
+    CAPTUREOS_WLR_OUT_Y=""
+    CAPTUREOS_WLR_OUT_W=""
+    CAPTUREOS_WLR_OUT_H=""
+    captureos_collect_wlr_displays || return 1
+    for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
+        IFS='|' read -r name w h x y primary rate <<<"$entry"
+        [[ "$name" == "$want" ]] || continue
+        CAPTUREOS_WLR_OUT_X="$x"
+        CAPTUREOS_WLR_OUT_Y="$y"
+        CAPTUREOS_WLR_OUT_W="$w"
+        CAPTUREOS_WLR_OUT_H="$h"
+        return 0
+    done
+    return 1
+}
+
+captureos_warp_cursor_absolute() {
+    local cx="${1:-0}" cy="${2:-0}"
+    # xdotool only moves the XWayland pointer — still useful for X11 ozone.
     if command -v xdotool >/dev/null 2>&1; then
         xdotool mousemove --sync "$cx" "$cy" 2>/dev/null \
             || xdotool mousemove "$cx" "$cy" 2>/dev/null || true
     fi
     if command -v wlrctl >/dev/null 2>&1; then
-        # Relative hop: jump far left/up then walk to target (no absolute API).
+        # wlrctl pointer move is relative; hop to the desktop origin first.
         wlrctl pointer move -8000 -8000 2>/dev/null || true
         wlrctl pointer move "$cx" "$cy" 2>/dev/null || true
     fi
