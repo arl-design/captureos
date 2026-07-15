@@ -329,10 +329,10 @@ KIOSK_FLAGS=(
     --no-first-run
     --disable-features=TranslateUI
 )
+# Never start already-fullscreen: labwc MoveToOutput is a no-op on
+# fullscreen windows, which is why both chromiums stuck on the big screen.
 if [[ "${CAPTUREOS_FORCE_KIOSK:-0}" == "1" ]]; then
     KIOSK_FLAGS+=(--kiosk)
-else
-    KIOSK_FLAGS+=(--start-fullscreen)
 fi
 # Prefer X11 so --window-position and xdotool/wmctrl can place windows.
 if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
@@ -342,9 +342,12 @@ KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
 
 launch_kiosk() {
     local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
+    # Warp cursor onto the target output first — labwc maps new windows
+    # to the output under the cursor.
+    if declare -F captureos_warp_cursor_to >/dev/null 2>&1; then
+        captureos_warp_cursor_to "$x" "$y" "$w" "$h"
+    fi
     # 9>&- so Chromium does not inherit (and hold) the launcher lock.
-    # Keep --class for xdotool / labwc matching (do not use --app, which
-    # can override WM_CLASS on some Chromium builds).
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
         --class="$class" \
         --name="$class" \
@@ -356,12 +359,14 @@ launch_kiosk() {
         9>&- &
 }
 
-# Gallery on the wall / main display.
+# Gallery on the wall / main display first (cursor already there).
 if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
     launch_kiosk gallery CaptureOS-Gallery "$BASE_URL/#/gallery" \
         "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
         "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H"
     echo "gallery kiosk launched"
+    # Let the window map under the gallery cursor before moving it.
+    sleep 2
 fi
 
 # Booth on the touchscreen.
@@ -370,7 +375,7 @@ launch_kiosk booth CaptureOS-Booth "$BASE_URL/#/" \
     "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H"
 echo "booth kiosk launched"
 
-sleep 2
+sleep 3
 
 # Verify-and-retry placement: at boot Chromium starts before the second
 # monitor is fully arranged, so windows pile onto one screen. Keep

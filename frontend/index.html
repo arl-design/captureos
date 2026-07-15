@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>CaptureOS</title>
+    <script>
+      // Set the window title before Chromium maps the surface so labwc
+      // window rules can match booth vs gallery on first map.
+      (function () {
+        var h = location.hash || '';
+        document.title = /gallery|slideshow/.test(h)
+          ? 'CaptureOS Gallery'
+          : /admin/.test(h)
+            ? 'CaptureOS Admin'
+            : 'CaptureOS Booth';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

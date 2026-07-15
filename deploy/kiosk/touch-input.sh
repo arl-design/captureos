@@ -81,28 +81,43 @@ def attr(el, name):
     return el.get(name) or el.get(f"{ns}{name}")
 
 
+def base_name(name: str) -> str:
+    """Strip trailing '(USB …)' so the same screen keeps one mapping across ports."""
+    if " (USB " in name:
+        return name.rsplit(" (USB ", 1)[0].strip()
+    return name.strip()
+
+
 changed = False
+want_base = base_name(device)
 existing = None
+
 for touch in list(root):
     if touch.tag.split("}", 1)[-1] != "touch":
         continue
-    if attr(touch, "deviceName") == device:
-        if existing is None:
+    name = attr(touch, "deviceName") or ""
+    # Drop stale USB-port variants and any entry for this panel that
+    # pointed at the wrong output (e.g. HDMI-A-2 when booth is HDMI-A-1).
+    if base_name(name) == want_base or name == device:
+        if existing is None and name == device:
             existing = touch
         else:
-            root.remove(touch)  # duplicate entry
+            root.remove(touch)
             changed = True
+            print(f"CaptureOS: removed stale touch entry '{name}'")
 
 if existing is None:
     existing = ET.SubElement(root, f"{ns}touch")
     existing.set("deviceName", device)
     changed = True
 
+if attr(existing, "deviceName") != device:
+    existing.set("deviceName", device)
+    changed = True
 if attr(existing, "mapToOutput") != map_output:
     existing.set("mapToOutput", map_output)
     changed = True
 if attr(existing, "mouseEmulation") != emulation:
-    # Also corrects entries an older CaptureOS wrote with emulation on.
     existing.set("mouseEmulation", emulation)
     changed = True
 
@@ -146,7 +161,8 @@ captureos_list_touch_devices() {
         if [[ "$lower" == *touch* || "$lower" == *touchscreen* \
             || "$lower" == *egalax* || "$lower" == *ilitek* \
             || "$lower" == *goodix* || "$lower" == *usbtouch* \
-            || "$lower" == *multitouch* || "$lower" == *hid*multi* ]]; then
+            || "$lower" == *multitouch* || "$lower" == *hid*multi* \
+            || "$lower" == *qdtech* || "$lower" == *mpi7003* ]]; then
             printf '%s\t%s\n' "$id" "$name"
             continue
         fi

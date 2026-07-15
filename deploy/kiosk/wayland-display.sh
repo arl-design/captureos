@@ -64,24 +64,35 @@ captureos_to_xrandr_output() {
     printf '%s' "$name"
 }
 
-# Pin Chromium booth/gallery windows to the correct outputs via labwc.
-# xdotool cannot move Chromium --kiosk windows under XWayland (they report
-# 10x10 @ 10,10), so window rules are the reliable path on Pi OS Bookworm+.
+# Pin Chromium booth/gallery windows via labwc actions.
+# The old attribute form (output= / fullscreen=) is NOT valid labwc config —
+# use MoveTo + ResizeTo + ToggleFullscreen. Must NOT start Chromium already
+# fullscreen: MoveToOutput is a no-op on fullscreen windows.
 captureos_apply_labwc_window_rules() {
-    local booth_out gallery_out
+    local booth_out gallery_out bx by bw bh gx gy gw gh
     booth_out="$(captureos_to_wlr_output "${CAPTUREOS_BOOTH_OUTPUT:-}")"
     gallery_out="$(captureos_to_wlr_output "${CAPTUREOS_GALLERY_OUTPUT:-}")"
+    bx="${CAPTUREOS_BOOTH_X:-0}"
+    by="${CAPTUREOS_BOOTH_Y:-0}"
+    bw="${CAPTUREOS_BOOTH_W:-1024}"
+    bh="${CAPTUREOS_BOOTH_H:-600}"
+    gx="${CAPTUREOS_GALLERY_X:-0}"
+    gy="${CAPTUREOS_GALLERY_Y:-0}"
+    gw="${CAPTUREOS_GALLERY_W:-1920}"
+    gh="${CAPTUREOS_GALLERY_H:-1080}"
     [[ -n "$booth_out" ]] || return 0
 
     local rc="${XDG_CONFIG_HOME:-$HOME/.config}/labwc/rc.xml"
     mkdir -p "$(dirname "$rc")"
 
-    python3 - "$rc" "$booth_out" "$gallery_out" <<'PY'
+    python3 - "$rc" "$booth_out" "$gallery_out" \
+        "$bx" "$by" "$bw" "$bh" "$gx" "$gy" "$gw" "$gh" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-rc_path, booth_out, gallery_out = sys.argv[1:4]
+(rc_path, booth_out, gallery_out,
+ bx, by, bw, bh, gx, gy, gw, gh) = sys.argv[1:12]
 path = Path(rc_path)
 ns = "{http://openbox.org/3.4/rc}"
 ET.register_namespace("", "http://openbox.org/3.4/rc")
@@ -101,10 +112,28 @@ for rules in list(root):
         if rule.tag.split("}", 1)[-1] != "windowRule":
             continue
         ident = rule.get("identifier") or ""
-        if ident.startswith("CaptureOS-"):
+        title = rule.get("title") or ""
+        if ident.startswith("CaptureOS") or title.startswith("CaptureOS"):
             rules.remove(rule)
     if len(list(rules)) == 0:
         root.remove(rules)
+
+# Prefer cursor-based placement so warp-before-launch also works.
+placement = None
+for child in root:
+    if child.tag.split("}", 1)[-1] == "placement":
+        placement = child
+        break
+if placement is None:
+    placement = ET.SubElement(root, f"{ns}placement")
+policy = None
+for child in placement:
+    if child.tag.split("}", 1)[-1] == "policy":
+        policy = child
+        break
+if policy is None:
+    policy = ET.SubElement(placement, f"{ns}policy")
+policy.text = "cursor"
 
 rules = None
 for child in root:
@@ -114,19 +143,44 @@ for child in root:
 if rules is None:
     rules = ET.SubElement(root, f"{ns}windowRules")
 
-def add_rule(ident, output):
-    if not output:
-        return
-    rule = ET.SubElement(rules, f"{ns}windowRule")
-    rule.set("identifier", ident)
-    rule.set("output", output)
-    rule.set("fullscreen", "yes")
 
-add_rule("CaptureOS-Booth", booth_out)
-add_rule("CaptureOS-Gallery", gallery_out or "")
+def add_action(rule, name, **attrs):
+    action = ET.SubElement(rule, f"{ns}action")
+    action.set("name", name)
+    for k, v in attrs.items():
+        action.set(k, str(v))
+
+
+def add_rule(*, ident=None, title=None, x=None, y=None, w=None, h=None, output=None):
+    rule = ET.SubElement(rules, f"{ns}windowRule")
+    if ident:
+        rule.set("identifier", ident)
+    if title:
+        rule.set("title", title)
+    # Stop Chromium repositioning itself under XWayland after we place it.
+    rule.set("ignoreConfigureRequest", "yes")
+    rule.set("serverDecoration", "no")
+    if x is not None and y is not None:
+        add_action(rule, "MoveTo", x=x, y=y)
+    if w is not None and h is not None:
+        add_action(rule, "ResizeTo", width=w, height=h)
+    if output:
+        add_action(rule, "MoveToOutput", output=output)
+    add_action(rule, "ToggleFullscreen")
+
+
+# Match by WM_CLASS (--class) AND by document title (more reliable).
+add_rule(ident="CaptureOS-Booth*", x=bx, y=by, w=bw, h=bh, output=booth_out or None)
+add_rule(title="CaptureOS Booth*", x=bx, y=by, w=bw, h=bh, output=booth_out or None)
+if gallery_out:
+    add_rule(ident="CaptureOS-Gallery*", x=gx, y=gy, w=gw, h=gh, output=gallery_out)
+    add_rule(title="CaptureOS Gallery*", x=gx, y=gy, w=gw, h=gh, output=gallery_out)
 
 tree.write(path, encoding="unicode", xml_declaration=True)
-print(f"CaptureOS: labwc window rules booth->{booth_out} gallery->{gallery_out or '(n/a)'}")
+print(
+    f"CaptureOS: labwc rules booth@{bx},{by} {bw}x{bh}->{booth_out} "
+    f"gallery@{gx},{gy} {gw}x{gh}->{gallery_out or '(n/a)'}"
+)
 PY
 
     if command -v labwc >/dev/null 2>&1; then
@@ -134,6 +188,27 @@ PY
         sleep 0.5
     fi
     return 0
+}
+
+# Warp the seat cursor to an output's center so new windows map there.
+# labwc places new windows on the output under the cursor.
+captureos_warp_cursor_to() {
+    local x="${1:-0}" y="${2:-0}" w="${3:-100}" h="${4:-100}"
+    local cx=$((x + w / 2)) cy=$((y + h / 2))
+    echo "CaptureOS: warping cursor to ${cx},${cy}"
+    # Prefer absolute move via wl-click / ydotool if present later; xdotool
+    # moves the XWayland pointer which labwc still often uses for placement
+    # of X11 (ozone) Chromium windows.
+    if command -v xdotool >/dev/null 2>&1; then
+        xdotool mousemove --sync "$cx" "$cy" 2>/dev/null \
+            || xdotool mousemove "$cx" "$cy" 2>/dev/null || true
+    fi
+    if command -v wlrctl >/dev/null 2>&1; then
+        # Relative hop: jump far left/up then walk to target (no absolute API).
+        wlrctl pointer move -8000 -8000 2>/dev/null || true
+        wlrctl pointer move "$cx" "$cy" 2>/dev/null || true
+    fi
+    sleep 0.3
 }
 
 # Parse real wlr-randr output. The current mode is NOT on the header line:

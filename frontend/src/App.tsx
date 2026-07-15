@@ -18,6 +18,18 @@ function useHashRoute(): string {
 
 export default function App() {
   const route = useHashRoute();
+
+  useEffect(() => {
+    // Distinct titles so labwc window rules can match each kiosk window.
+    if (route.startsWith('/admin')) {
+      document.title = 'CaptureOS Admin';
+    } else if (route.startsWith('/gallery') || route.startsWith('/slideshow')) {
+      document.title = 'CaptureOS Gallery';
+    } else {
+      document.title = 'CaptureOS Booth';
+    }
+  }, [route]);
+
   if (route.startsWith('/admin')) return <Admin />;
   if (route.startsWith('/slideshow')) return <Gallery forceMode="slideshow" />;
   if (route.startsWith('/gallery')) return <Gallery />;

@@ -21,8 +21,9 @@ apt-get update -qq
 # nodejs package (22.x, required below for node:sqlite) bundles npm and
 # declares `Conflicts: npm`, so asking for both makes apt unsolvable.
 apt-get install -y -qq nginx nodejs python3-pil rpicam-apps-lite \
-    xinput x11-xserver-utils xdotool wmctrl libinput-tools wlr-randr \
+    xinput x11-xserver-utils xdotool wmctrl libinput-tools wlr-randr wlrctl \
     chromium-browser 2>/dev/null ||
+    apt-get install -y -qq nginx nodejs python3-pil xinput x11-xserver-utils xdotool wmctrl libinput-tools wlr-randr wlrctl chromium ||
     apt-get install -y -qq nginx nodejs python3-pil xinput x11-xserver-utils xdotool wmctrl libinput-tools wlr-randr chromium
 
 # Ensure npm is available. NodeSource's nodejs bundles it; a distro nodejs
