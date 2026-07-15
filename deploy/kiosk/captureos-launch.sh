@@ -16,6 +16,9 @@
 #   --list-displays       print connected monitors and exit
 #   --list-inputs         print touch devices and exit
 #   CAPTUREOS_GALLERY=0   don't open the wall-display gallery window
+#   CAPTUREOS_OZONE_PLATFORM=wayland|x11  force both windows onto one platform
+#   CAPTUREOS_BOOTH_OZONE / CAPTUREOS_GALLERY_OZONE  per-window override
+#     Default on dual-head labwc: booth=wayland (touch), gallery=x11 (placement)
 #
 # Display layout is resolved automatically (smallest monitor -> booth,
 # largest other -> gallery). Override in ~/.config/captureos/display.conf:
@@ -335,28 +338,51 @@ KIOSK_FLAGS=(
 if [[ "${CAPTUREOS_FORCE_KIOSK:-0}" == "1" ]]; then
     KIOSK_FLAGS+=(--kiosk --kiosk-printing)
 fi
-# Native Wayland on labwc: touch goes compositor -> surface directly, so
-# taps can never be offset the way XWayland coordinates were. Chromium
-# sets its Wayland app_id from --class, which our labwc rules match.
-# X11 (XWayland) remains available via CAPTUREOS_OZONE_PLATFORM=x11.
-if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
+
+# Dual-screen on labwc: booth needs native Wayland (correct touch); gallery
+# moves reliably as XWayland via xdotool/wmctrl. Pi OS Chromium often ignores
+# labwc window rules for native Wayland windows, so both end up on the
+# touchscreen when everything runs on ozone-platform=wayland.
+captureos_resolve_ozone_platforms() {
+    if [[ -n "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
+        CAPTUREOS_BOOTH_OZONE="$CAPTUREOS_OZONE_PLATFORM"
+        CAPTUREOS_GALLERY_OZONE="$CAPTUREOS_OZONE_PLATFORM"
+        return 0
+    fi
+
+    local session_ozone=x11 use_hybrid=0
     if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
         && captureos_is_wayland_session; then
-        CAPTUREOS_OZONE_PLATFORM=wayland
-    else
-        CAPTUREOS_OZONE_PLATFORM=x11
+        session_ozone=wayland
     fi
-fi
-KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
-if [[ "$CAPTUREOS_OZONE_PLATFORM" == "x11" ]]; then
-    # On Wayland, maximized-at-map windows cannot be moved between
-    # outputs by labwc rules — keep windows normal there.
-    KIOSK_FLAGS+=(--start-maximized)
-fi
-echo "chromium ozone platform: $CAPTUREOS_OZONE_PLATFORM"
+    if [[ "$session_ozone" == "wayland" \
+        && "${CAPTUREOS_GALLERY:-1}" == "1" \
+        && -n "${CAPTUREOS_BOOTH_OUTPUT:-}" \
+        && -n "${CAPTUREOS_GALLERY_OUTPUT:-}" \
+        && "${CAPTUREOS_BOOTH_OUTPUT}" != "${CAPTUREOS_GALLERY_OUTPUT}" ]]; then
+        use_hybrid=1
+    fi
+
+    if [[ -z "${CAPTUREOS_BOOTH_OZONE:-}" ]]; then
+        if (( use_hybrid )); then
+            CAPTUREOS_BOOTH_OZONE=wayland
+        else
+            CAPTUREOS_BOOTH_OZONE=$session_ozone
+        fi
+    fi
+    if [[ -z "${CAPTUREOS_GALLERY_OZONE:-}" ]]; then
+        if (( use_hybrid )); then
+            CAPTUREOS_GALLERY_OZONE=x11
+        else
+            CAPTUREOS_GALLERY_OZONE=$session_ozone
+        fi
+    fi
+}
+captureos_resolve_ozone_platforms
+echo "chromium ozone: booth=${CAPTUREOS_BOOTH_OZONE:-?} gallery=${CAPTUREOS_GALLERY_OZONE:-?}"
 
 launch_kiosk() {
-    local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7" output="${8:-}"
+    local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7" output="${8:-}" ozone="${9:-x11}"
     # Warp cursor onto the target output first — labwc maps new windows
     # to the output under the cursor when window rules do not match.
     if declare -F captureos_warp_cursor_to_output >/dev/null 2>&1; then
@@ -373,16 +399,20 @@ launch_kiosk() {
     fi
     # --app hides the tab/search bar WITHOUT Chromium --kiosk (which
     # breaks dual-display placement). Keep --class for labwc matching.
+    local -a launch_flags=("${KIOSK_FLAGS[@]}")
+    launch_flags+=(--ozone-platform="$ozone")
+    if [[ "$ozone" == "x11" ]]; then
+        launch_flags+=(--start-maximized)
+    fi
     local -a window_geom=()
-    # Native Wayland: let labwc window rules place/size windows. Chromium
-    # --window-position can pin both surfaces on one output before rules run.
-    if [[ "$CAPTUREOS_OZONE_PLATFORM" == "x11" ]]; then
+    if [[ "$ozone" == "x11" ]]; then
         window_geom=(
             --window-position="${x},${y}"
             --window-size="${w},${h}"
         )
     fi
-    "$BROWSER" "${KIOSK_FLAGS[@]}" \
+    echo "CaptureOS: launching ${profile} (${class}) on ozone=${ozone}"
+    "$BROWSER" "${launch_flags[@]}" \
         --class="$class" \
         --name="$class" \
         --user-data-dir="$profile_dir" \
@@ -391,14 +421,22 @@ launch_kiosk() {
         9>&- &
 }
 
+# XWayland placement needs a live DISPLAY before gallery launch.
+if [[ "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" || "${CAPTUREOS_BOOTH_OZONE:-x11}" == "x11" ]]; then
+    if declare -F captureos_ensure_x_display >/dev/null 2>&1; then
+        captureos_ensure_x_display || true
+    fi
+fi
+
 # Gallery on the wall / main display first (cursor already there).
 if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
     launch_kiosk gallery CaptureOS-Gallery "$BASE_URL/#/gallery" \
         "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
         "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" \
-        "${CAPTUREOS_GALLERY_OUTPUT:-}"
+        "${CAPTUREOS_GALLERY_OUTPUT:-}" \
+        "${CAPTUREOS_GALLERY_OZONE:-x11}"
     echo "gallery kiosk launched"
-    # Let the kiosk surface map under the gallery cursor before moving on.
+    # Let the XWayland surface map before moving on to booth.
     sleep 3
 fi
 
@@ -406,29 +444,37 @@ fi
 launch_kiosk booth CaptureOS-Booth "$BASE_URL/#/" \
     "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
     "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" \
-    "${CAPTUREOS_BOOTH_OUTPUT:-}"
+    "${CAPTUREOS_BOOTH_OUTPUT:-}" \
+    "${CAPTUREOS_BOOTH_OZONE:-wayland}"
 echo "booth kiosk launched"
 
 sleep 4
 
-# Verify-and-retry placement (X11/XWayland only — xdotool and wmctrl
-# cannot see native Wayland windows; labwc rules handle those).
+# Verify-and-retry placement for XWayland windows (xdotool cannot see
+# native Wayland surfaces). Booth on native Wayland relies on cursor warp
+# + labwc rules; gallery on XWayland is positioned explicitly.
 booth_placed=1
 gallery_placed=1
-if [[ "$CAPTUREOS_OZONE_PLATFORM" != "x11" ]]; then
-    echo "wayland mode: placement + fullscreen handled by labwc window rules"
-elif declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
-    if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+if declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
+    if [[ "${CAPTUREOS_GALLERY:-1}" == "1" && "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]]; then
         captureos_ensure_window_layout CaptureOS-Gallery \
             "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
             "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" 8 9>&- &
         GALLERY_POS_PID=$!
+    elif [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+        echo "gallery wayland: placement handled by labwc window rules"
     fi
-    captureos_ensure_window_layout CaptureOS-Booth \
-        "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
-        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" 8 9>&- &
-    BOOTH_POS_PID=$!
-    wait "$BOOTH_POS_PID" || booth_placed=0
+    if [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; then
+        captureos_ensure_window_layout CaptureOS-Booth \
+            "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+            "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" 8 9>&- &
+        BOOTH_POS_PID=$!
+    else
+        echo "booth wayland: placement handled by cursor warp + labwc rules"
+    fi
+    if [[ -n "${BOOTH_POS_PID:-}" ]]; then
+        wait "$BOOTH_POS_PID" || booth_placed=0
+    fi
     if [[ -n "${GALLERY_POS_PID:-}" ]]; then
         wait "$GALLERY_POS_PID" || gallery_placed=0
     fi
@@ -450,39 +496,64 @@ elif declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
             captureos_setup_wayland_displays || true
         fi
         captureos_resolve_display_layout || true
-        if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+        if [[ "${CAPTUREOS_GALLERY:-1}" == "1" && "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]]; then
             captureos_ensure_window_layout CaptureOS-Gallery \
                 "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
                 "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" 3 || true
         fi
-        captureos_ensure_window_layout CaptureOS-Booth \
-            "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
-            "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" 3 || true
+        if [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; then
+            captureos_ensure_window_layout CaptureOS-Booth \
+                "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+                "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" 3 || true
+        fi
     fi
-    captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
-    captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+    if [[ "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]]; then
+        captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+    fi
+    if [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; then
+        captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+    fi
 elif declare -F captureos_position_window_class >/dev/null 2>&1; then
-    if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
+    if [[ "${CAPTUREOS_GALLERY:-1}" == "1" && "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]]; then
         captureos_position_window_class CaptureOS-Gallery \
             "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
             "$CAPTUREOS_GALLERY_W" "$CAPTUREOS_GALLERY_H" || true
     fi
-    captureos_position_window_class CaptureOS-Booth \
-        "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
-        "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" || true
-    captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
-    captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+    if [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; then
+        captureos_position_window_class CaptureOS-Booth \
+            "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
+            "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" || true
+    fi
+    if [[ "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]]; then
+        captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+    fi
+    if [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; then
+        captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+    fi
 fi
 
-# X11 only: Chromium sometimes drops fullscreen shortly after map.
-if [[ "$CAPTUREOS_OZONE_PLATFORM" == "x11" ]] \
+if declare -F captureos_log_window_placement >/dev/null 2>&1; then
+    captureos_log_window_placement || true
+fi
+
+# XWayland only: Chromium sometimes drops fullscreen shortly after map.
+if { [[ "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]] \
+    || [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; } \
     && declare -F captureos_fullscreen_window_class >/dev/null 2>&1; then
     ( sleep 4
-      captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
-      captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+      if [[ "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]]; then
+          captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+      fi
+      if [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; then
+          captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+      fi
       sleep 3
-      captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
-      captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+      if [[ "${CAPTUREOS_GALLERY_OZONE:-x11}" == "x11" ]]; then
+          captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+      fi
+      if [[ "${CAPTUREOS_BOOTH_OZONE:-wayland}" == "x11" ]]; then
+          captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+      fi
     ) 9>&- &
 fi
 

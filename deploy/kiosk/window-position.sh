@@ -226,3 +226,24 @@ captureos_arrange_extended_desktop() {
         captureos_collect_xrandr_displays || true
     fi
 }
+
+# Log where kiosk windows ended up (XWayland via xdotool, Wayland via wlrctl).
+captureos_log_window_placement() {
+    echo "----- CaptureOS window placement -----"
+    if command -v xdotool >/dev/null 2>&1; then
+        local class wid cx cy
+        for class in CaptureOS-Gallery CaptureOS-Booth; do
+            wid="$(captureos_find_window_by_class "$class" 2>/dev/null || true)"
+            if [[ -n "$wid" ]] && read -r cx cy < <(captureos_window_center "$wid" 2>/dev/null); then
+                echo "  ${class} (XWayland): center ${cx},${cy}"
+            fi
+        done
+    fi
+    if command -v wlrctl >/dev/null 2>&1 \
+        && declare -F captureos_ensure_wayland_env >/dev/null 2>&1; then
+        captureos_ensure_wayland_env || true
+        wlrctl toplevel list 2>/dev/null | grep -i capture || \
+            echo "  (no CaptureOS Wayland toplevels listed by wlrctl)"
+    fi
+    echo "--------------------------------------"
+}
