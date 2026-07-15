@@ -9,8 +9,16 @@
 CAPTUREOS_BOOTH_MODE=1024x600
 CAPTUREOS_GALLERY_MODE=1920x1080
 #
-# Or leave both commented out — CaptureOS auto-picks the smallest panel
-# as the booth and the largest as the gallery.
+# Or leave both commented out — CaptureOS auto-picks:
+#   * a DSI/DPI panel as the booth when present (customer touchscreen),
+#   * otherwise the smallest HDMI panel as booth,
+#   * the largest remaining panel as gallery.
+#
+# When you switch to a DSI booth panel this weekend, either leave MODE
+# unset (auto) or set e.g.:
+# CAPTUREOS_BOOTH_MODE=800x480
+# CAPTUREOS_GALLERY_MODE=1920x1080
+# (or CAPTUREOS_BOOTH_OUTPUT=DSI-1 if you prefer an explicit connector)
 #
 # === Fragile: match by connector name ===
 # HDMI-A-1 / HDMI-A-2 are physical ports on the Pi board (HDMI0 near

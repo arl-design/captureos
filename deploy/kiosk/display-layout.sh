@@ -80,21 +80,35 @@ captureos_parse_geom() {
     fi
 }
 
-# Heuristic: booth on the SMALLEST panel (the 1024x600 touchscreen),
-# gallery on the largest remaining display. Which output the OS marks
-# "primary" is deliberately ignored — auto-login sessions often promote
-# the touchscreen to primary, which used to steal the gallery window.
+# Heuristic: booth on the touchscreen, gallery on the wall display.
+# Prefer a DSI panel for the booth when present (official Pi / Waveshare
+# touchscreens). Otherwise use the smallest panel (1024x600 HDMI booth).
 captureos_auto_assign_displays() {
     local entry name w h x y primary area best_booth="" best_gallery=""
     local booth_area=999999999 gallery_area=-1
+    local dsi_booth=""
+
     for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
         IFS='|' read -r name w h x y primary <<<"$entry"
+        case "$name" in
+            DSI-*|DPI-*)
+                # First DSI/DPI panel wins as the booth touchscreen.
+                if [[ -z "$dsi_booth" ]]; then
+                    dsi_booth="$entry"
+                fi
+                ;;
+        esac
         area=$((w * h))
         if (( area < booth_area )); then
             booth_area=$area
             best_booth="$entry"
         fi
     done
+
+    if [[ -n "$dsi_booth" ]]; then
+        best_booth="$dsi_booth"
+    fi
+
     for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
         [[ "$entry" == "$best_booth" ]] && continue
         IFS='|' read -r name w h x y primary <<<"$entry"
