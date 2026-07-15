@@ -178,6 +178,37 @@ captureos_list_touch_devices() {
     done < <(xinput list 2>/dev/null)
 }
 
+# Apply an absolute Coordinate Transformation Matrix that constrains a
+# touch device to the booth rectangle of the extended desktop. More
+# reliable than map-to-output alone under XWayland (wrong name / stale CTM).
+captureos_apply_touch_ctm() {
+    local id="$1" ox="${2:-0}" oy="${3:-0}" ow="${4:-0}" oh="${5:-0}"
+    [[ -n "$id" && "$ow" -gt 0 && "$oh" -gt 0 ]] || return 1
+    command -v xinput >/dev/null 2>&1 || return 1
+
+    local line dw dh
+    line="$(xrandr 2>/dev/null | awk '/current/{print; exit}')"
+    # "Screen 0: ... current 2944 x 1080, ..."
+    dw="$(awk '{for(i=1;i<=NF;i++) if($i=="current"){print $(i+1); exit}}' <<<"$line")"
+    dh="$(awk '{for(i=1;i<=NF;i++) if($i=="current"){print $(i+3); exit}}' <<<"$line")"
+    dw="${dw%,}"
+    dh="${dh%,}"
+    [[ -n "$dw" && -n "$dh" && "$dw" -gt 0 && "$dh" -gt 0 ]] || return 1
+
+    local a c e f
+    a="$(awk -v ow="$ow" -v dw="$dw" 'BEGIN{printf "%.6f", ow/dw}')"
+    c="$(awk -v ox="$ox" -v dw="$dw" 'BEGIN{printf "%.6f", ox/dw}')"
+    e="$(awk -v oh="$oh" -v dh="$dh" 'BEGIN{printf "%.6f", oh/dh}')"
+    f="$(awk -v oy="$oy" -v dh="$dh" 'BEGIN{printf "%.6f", oy/dh}')"
+
+    if xinput set-prop "$id" "Coordinate Transformation Matrix" \
+        "$a" 0 "$c" 0 "$e" "$f" 0 0 1 2>/dev/null; then
+        echo "CaptureOS: CTM id=${id} -> booth ${ow}x${oh}+${ox}+${oy} on ${dw}x${dh} (${a} 0 ${c} 0 ${e} ${f} 0 0 1)"
+        return 0
+    fi
+    return 1
+}
+
 # Map touch device(s) to the booth monitor (CAPTUREOS_BOOTH_OUTPUT).
 captureos_map_touch_to_booth() {
     local output="${1:-${CAPTUREOS_BOOTH_OUTPUT:-}}"
@@ -191,12 +222,12 @@ captureos_map_touch_to_booth() {
     export XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
 
     local mapped=0
+    local bx="${CAPTUREOS_BOOTH_X:-0}" by="${CAPTUREOS_BOOTH_Y:-0}"
+    local bw="${CAPTUREOS_BOOTH_W:-0}" bh="${CAPTUREOS_BOOTH_H:-0}"
 
     if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
         && captureos_is_wayland_session \
         && declare -F captureos_apply_labwc_touch >/dev/null 2>&1; then
-        # Map every currently connected panel-like libinput device to booth
-        # (USB path suffixes change between boots).
         local libdev
         if [[ -n "${CAPTUREOS_TOUCH_LIBINPUT:-}" ]]; then
             captureos_apply_labwc_touch "$output" "$CAPTUREOS_TOUCH_LIBINPUT" && mapped=1
@@ -205,7 +236,6 @@ captureos_map_touch_to_booth() {
                 [[ -n "$libdev" ]] || continue
                 captureos_apply_labwc_touch "$output" "$libdev" && mapped=1
             done < <(captureos_list_libinput_touch_devices)
-            # Fallback if libinput-tools missing.
             (( mapped == 0 )) && captureos_apply_labwc_touch "$output" "" && mapped=1
         fi
     fi
@@ -215,47 +245,47 @@ captureos_map_touch_to_booth() {
         if declare -F captureos_to_xrandr_output >/dev/null 2>&1; then
             xoutput="$(captureos_to_xrandr_output "$output")"
         fi
-        # Chromium uses ozone X11 — xinput map-to-output is required so
-        # taps are constrained to the booth panel instead of the whole
-        # extended desktop (which makes the shutter feel "too high").
         local -a candidates=("$xoutput")
         if [[ "$xoutput" == HDMI-A-* ]]; then
             candidates+=("HDMI-${xoutput#HDMI-A-}")
         elif [[ "$xoutput" == HDMI-* ]]; then
             candidates+=("HDMI-A-${xoutput#HDMI-}")
         fi
-        local try_out id name
-        for try_out in "${candidates[@]}"; do
-            xrandr --query 2>/dev/null | grep -q "^${try_out} connected" || continue
-            if [[ -n "${CAPTUREOS_TOUCH_DEVICE_ID:-}" ]]; then
-                xinput set-prop "$CAPTUREOS_TOUCH_DEVICE_ID" \
-                    "Coordinate Transformation Matrix" \
-                    1 0 0 0 1 0 0 0 1 2>/dev/null || true
-                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE_ID" "$try_out" 2>/dev/null; then
-                    echo "CaptureOS: mapped touch id ${CAPTUREOS_TOUCH_DEVICE_ID} -> ${try_out}"
-                    mapped=1
-                fi
-            elif [[ -n "${CAPTUREOS_TOUCH_DEVICE:-}" ]]; then
-                xinput set-prop "$CAPTUREOS_TOUCH_DEVICE" \
-                    "Coordinate Transformation Matrix" \
-                    1 0 0 0 1 0 0 0 1 2>/dev/null || true
-                if xinput map-to-output "$CAPTUREOS_TOUCH_DEVICE" "$try_out" 2>/dev/null; then
-                    echo "CaptureOS: mapped touch '${CAPTUREOS_TOUCH_DEVICE}' -> ${try_out}"
-                    mapped=1
-                fi
-            else
-                while IFS=$'\t' read -r id name; do
-                    [[ -n "$id" ]] || continue
-                    # Clear any stale matrix from a previous bad layout.
-                    xinput set-prop "$id" "Coordinate Transformation Matrix" \
-                        1 0 0 0 1 0 0 0 1 2>/dev/null || true
-                    if xinput map-to-output "$id" "$try_out" 2>/dev/null; then
-                        echo "CaptureOS: mapped touch '${name}' (id ${id}) -> ${try_out}"
-                        mapped=1
-                    fi
-                done < <(captureos_list_touch_devices)
+
+        local id name try_out
+        local -a ids=()
+        if [[ -n "${CAPTUREOS_TOUCH_DEVICE_ID:-}" ]]; then
+            ids+=("$CAPTUREOS_TOUCH_DEVICE_ID")
+        elif [[ -n "${CAPTUREOS_TOUCH_DEVICE:-}" ]]; then
+            while IFS=$'\t' read -r id name; do
+                [[ "$name" == "$CAPTUREOS_TOUCH_DEVICE" ]] && ids+=("$id")
+            done < <(captureos_list_touch_devices)
+            # Name may be unique enough for xinput by string.
+            ids+=("$CAPTUREOS_TOUCH_DEVICE")
+        else
+            while IFS=$'\t' read -r id name; do
+                [[ -n "$id" ]] && ids+=("$id")
+            done < <(captureos_list_touch_devices)
+        fi
+
+        for id in "${ids[@]}"; do
+            [[ -n "$id" ]] || continue
+            # Prefer an explicit matrix over the booth geometry (works even
+            # when map-to-output output names differ under XWayland).
+            if (( bw > 0 && bh > 0 )) && captureos_apply_touch_ctm "$id" "$bx" "$by" "$bw" "$bh"; then
+                mapped=1
+                continue
             fi
-            (( mapped == 1 )) && break
+            for try_out in "${candidates[@]}"; do
+                xrandr --query 2>/dev/null | grep -q "^${try_out} connected" || continue
+                xinput set-prop "$id" "Coordinate Transformation Matrix" \
+                    1 0 0 0 1 0 0 0 1 2>/dev/null || true
+                if xinput map-to-output "$id" "$try_out" 2>/dev/null; then
+                    echo "CaptureOS: mapped touch id/name '${id}' -> ${try_out}"
+                    mapped=1
+                    break
+                fi
+            done
         done
     fi
 

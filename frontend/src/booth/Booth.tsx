@@ -21,7 +21,7 @@ function CaptureButton({
   className?: string;
   onCapture: () => void;
 }) {
-  const handlePointerUp = (e: React.PointerEvent) => {
+  const handleClick = (e: React.MouseEvent | React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     onCapture();
@@ -37,7 +37,7 @@ function CaptureButton({
     <button
       type="button"
       className={className}
-      onPointerUp={handlePointerUp}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       aria-label="Capture"
     >

@@ -111,12 +111,15 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
     grid-area: capture;
     align-self: center;
     justify-self: center;
-    padding-bottom: 0.5rem;
+    /* Keep shutter clear of the bottom nav — touch Y-offset was
+       making Full Screen taps land on the yellow button. */
+    padding-bottom: 1.25rem;
+    margin-bottom: 0.25rem;
   }
 
   .booth-home .capture-fab-inline {
-    width: clamp(6rem, 20vw, 10rem);
-    height: clamp(6rem, 20vw, 10rem);
+    width: clamp(5.5rem, 18vw, 9rem);
+    height: clamp(5.5rem, 18vw, 9rem);
   }
 
   .booth-heading h1 { font-size: clamp(1.1rem, 3.2vw, 2rem); }
@@ -320,6 +323,11 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: flex;
   border-top: 1px solid var(--border);
   background: var(--panel);
+  position: relative;
+  z-index: 6;
+  /* Extra tap height so a slightly-high hit still finds the nav. */
+  min-height: 3.6rem;
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 .booth-nav button {
@@ -327,11 +335,16 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.15em;
-  padding: 0.4em 0 0.45em;
+  justify-content: center;
+  gap: 0.15rem;
+  min-height: 3.6rem;
+  padding: 0.45rem 0.25rem;
+  border: 0;
+  background: transparent;
   font-size: clamp(0.6rem, 3.2vw, 0.85rem);
   color: var(--muted);
   --icon-contrast: var(--panel);
+  touch-action: manipulation;
 }
 
 .booth-nav button.active { color: var(--yellow); --icon-contrast: var(--panel); }
