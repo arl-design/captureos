@@ -320,6 +320,10 @@ fi
 # windows that always open on the primary (big) display. Use an app window
 # with explicit size/position; labwc window rules force the right output
 # and fullscreen. (Optional CAPTUREOS_FORCE_KIOSK=1 restores old behaviour.)
+# With cursor-warp-before-launch, Chromium --kiosk maps fullscreen onto
+# the output under the cursor (labwc rule). That gives true kiosk chrome
+# (no tab/search bar) AND the correct screen. Set CAPTUREOS_FORCE_KIOSK=0
+# to fall back to app window + wmctrl fullscreen if needed.
 KIOSK_FLAGS=(
     --noerrdialogs
     --disable-infobars
@@ -331,12 +335,12 @@ KIOSK_FLAGS=(
     --use-mock-keychain
     --no-first-run
     --disable-features=TranslateUI
-    --start-maximized
+    --disable-pinch
 )
-# Never start already-fullscreen: labwc MoveToOutput is a no-op on
-# fullscreen windows, which is why both chromiums stuck on the big screen.
-if [[ "${CAPTUREOS_FORCE_KIOSK:-0}" == "1" ]]; then
-    KIOSK_FLAGS+=(--kiosk)
+if [[ "${CAPTUREOS_FORCE_KIOSK:-1}" == "1" ]]; then
+    KIOSK_FLAGS+=(--kiosk --kiosk-printing)
+else
+    KIOSK_FLAGS+=(--start-maximized)
 fi
 # Prefer X11 so --window-position and xdotool/wmctrl can place windows.
 if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
@@ -346,20 +350,20 @@ KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
 
 launch_kiosk() {
     local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
-    # Warp cursor onto the target output first — labwc maps new windows
-    # to the output under the cursor.
+    # Warp cursor onto the target output first — labwc maps new (kiosk)
+    # windows to the output under the cursor.
     if declare -F captureos_warp_cursor_to >/dev/null 2>&1; then
         captureos_warp_cursor_to "$x" "$y" "$w" "$h"
     fi
-    # 9>&- so Chromium does not inherit (and hold) the launcher lock.
+    # --app hides the tab/search bar (true kiosk look). Keep --class for
+    # labwc / xdotool matching.
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
         --class="$class" \
         --name="$class" \
         --user-data-dir="$LOG_DIR/captureos-profile-${profile}" \
         --window-position="${x},${y}" \
         --window-size="${w},${h}" \
-        --new-window \
-        "$url" \
+        --app="$url" \
         9>&- &
 }
 
