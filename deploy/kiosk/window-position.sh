@@ -133,6 +133,22 @@ captureos_window_center() {
     printf '%s %s' "$((X + WIDTH / 2))" "$((Y + HEIGHT / 2))"
 }
 
+captureos_fullscreen_window() {
+    local wid="$1"
+    [[ -n "$wid" ]] || return 1
+    if command -v wmctrl >/dev/null 2>&1; then
+        wmctrl -i -r "$wid" -b add,fullscreen 2>/dev/null && return 0
+    fi
+    xdotool windowstate --add FULLSCREEN "$wid" 2>/dev/null || return 1
+}
+
+captureos_fullscreen_window_class() {
+    local class="$1" wid
+    wid="$(captureos_find_window_by_class "$class" || true)"
+    [[ -n "$wid" ]] || return 1
+    captureos_fullscreen_window "$wid"
+}
+
 # Keep checking (and re-placing) a kiosk window until it really sits on
 # its target display. At boot Chromium often starts before the second
 # monitor is arranged, so a single positioning pass lands both windows
@@ -147,14 +163,16 @@ captureos_ensure_window_layout() {
         if [[ -n "$wid" ]]; then
             if read -r cx cy < <(captureos_window_center "$wid"); then
                 if (( cx >= x && cx < x + w && cy >= y && cy < y + h )); then
-                    echo "CaptureOS: ${class} verified at ${x},${y} center=${cx},${cy} (attempt ${i})"
+                    captureos_fullscreen_window "$wid" || true
+                    echo "CaptureOS: ${class} verified at ${x},${y} center=${cx},${cy} (attempt ${i}) — fullscreen"
                     return 0
                 fi
             fi
             captureos_position_window_class "$class" "$x" "$y" "$w" "$h" || true
             if read -r cx cy < <(captureos_window_center "$wid"); then
                 if (( cx >= x && cx < x + w && cy >= y && cy < y + h )); then
-                    echo "CaptureOS: ${class} moved to ${x},${y} center=${cx},${cy} (attempt ${i})"
+                    captureos_fullscreen_window "$wid" || true
+                    echo "CaptureOS: ${class} moved to ${x},${y} center=${cx},${cy} (attempt ${i}) — fullscreen"
                     return 0
                 fi
             fi
@@ -162,6 +180,8 @@ captureos_ensure_window_layout() {
         sleep 2
     done
     echo "CaptureOS: ${class} still not at ${x},${y} after ${tries} attempts" >&2
+    # Last-ditch: still fullscreen wherever it is so the UI isn't windowed.
+    captureos_fullscreen_window_class "$class" || true
     return 1
 }
 

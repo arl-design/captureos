@@ -166,6 +166,9 @@ def add_rule(*, ident=None, title=None, x=None, y=None, w=None, h=None, output=N
         add_action(rule, "ResizeTo", width=w, height=h)
     if output:
         add_action(rule, "MoveToOutput", output=output)
+    # Fill the output, then go fullscreen (kiosk look). Do this only once —
+    # a second ToggleFullscreen would leave the window windowed again.
+    add_action(rule, "Maximize")
     add_action(rule, "ToggleFullscreen")
 
 

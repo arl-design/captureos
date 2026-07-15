@@ -331,6 +331,7 @@ KIOSK_FLAGS=(
     --use-mock-keychain
     --no-first-run
     --disable-features=TranslateUI
+    --start-maximized
 )
 # Never start already-fullscreen: labwc MoveToOutput is a no-op on
 # fullscreen windows, which is why both chromiums stuck on the big screen.
@@ -428,6 +429,8 @@ if declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
             "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
             "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" 3 || true
     fi
+    captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+    captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
 elif declare -F captureos_position_window_class >/dev/null 2>&1; then
     if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
         captureos_position_window_class CaptureOS-Gallery \
@@ -437,6 +440,19 @@ elif declare -F captureos_position_window_class >/dev/null 2>&1; then
     captureos_position_window_class CaptureOS-Booth \
         "$CAPTUREOS_BOOTH_X" "$CAPTUREOS_BOOTH_Y" \
         "$CAPTUREOS_BOOTH_W" "$CAPTUREOS_BOOTH_H" || true
+    captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+    captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+fi
+
+# Chromium sometimes drops fullscreen shortly after map — nudge again.
+if declare -F captureos_fullscreen_window_class >/dev/null 2>&1; then
+    ( sleep 4
+      captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+      captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+      sleep 3
+      captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
+      captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
+    ) 9>&- &
 fi
 
 if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
