@@ -222,11 +222,16 @@ captureos_map_touch_to_booth() {
     export XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
 
     local mapped=0
+    local is_wayland=0
     local bx="${CAPTUREOS_BOOTH_X:-0}" by="${CAPTUREOS_BOOTH_Y:-0}"
     local bw="${CAPTUREOS_BOOTH_W:-0}" bh="${CAPTUREOS_BOOTH_H:-0}"
 
     if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
-        && captureos_is_wayland_session \
+        && captureos_is_wayland_session; then
+        is_wayland=1
+    fi
+
+    if (( is_wayland == 1 )) \
         && declare -F captureos_apply_labwc_touch >/dev/null 2>&1; then
         local libdev
         if [[ -n "${CAPTUREOS_TOUCH_LIBINPUT:-}" ]]; then
@@ -240,7 +245,9 @@ captureos_map_touch_to_booth() {
         fi
     fi
 
-    if command -v xinput >/dev/null 2>&1; then
+    # xinput CTM / map-to-output only works on real Xorg — XWayland
+    # ignores those properties, so skip them on Wayland sessions.
+    if (( is_wayland == 0 )) && command -v xinput >/dev/null 2>&1; then
         local xoutput="$output"
         if declare -F captureos_to_xrandr_output >/dev/null 2>&1; then
             xoutput="$(captureos_to_xrandr_output "$output")"

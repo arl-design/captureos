@@ -316,15 +316,9 @@ if declare -F captureos_kill_kiosk_windows >/dev/null 2>&1; then
     captureos_kill_kiosk_windows
 fi
 
-# Do NOT use --kiosk here: under Pi OS labwc/XWayland it creates unmovable
-# windows that always open on the primary (big) display. Use an app window
-# with explicit size/position; labwc window rules force the right output
-# and fullscreen. (Optional CAPTUREOS_FORCE_KIOSK=1 restores old behaviour.)
-# Do NOT use Chromium --kiosk by default: under labwc it maps both
-# windows onto one screen and xdotool cannot move them. Hide the
-# tab/search bar with --app instead, then fullscreen via wmctrl after
-# the window is on the correct output. Set CAPTUREOS_FORCE_KIOSK=1 only
-# as a last resort (single-display booths).
+# Do NOT use Chromium --kiosk: under labwc it maps both windows onto one
+# screen. Hide the tab/search bar with --app; labwc window rules place
+# each window on its output and fullscreen it.
 KIOSK_FLAGS=(
     --noerrdialogs
     --disable-infobars
@@ -342,11 +336,20 @@ KIOSK_FLAGS=(
 if [[ "${CAPTUREOS_FORCE_KIOSK:-0}" == "1" ]]; then
     KIOSK_FLAGS+=(--kiosk --kiosk-printing)
 fi
-# Prefer X11 so --window-position and xdotool/wmctrl can place windows.
+# Native Wayland on labwc: touch goes compositor -> surface directly, so
+# taps can never be offset the way XWayland coordinates were. Chromium
+# sets its Wayland app_id from --class, which our labwc rules match.
+# X11 (XWayland) remains available via CAPTUREOS_OZONE_PLATFORM=x11.
 if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
-    CAPTUREOS_OZONE_PLATFORM=x11
+    if declare -F captureos_is_wayland_session >/dev/null 2>&1 \
+        && captureos_is_wayland_session; then
+        CAPTUREOS_OZONE_PLATFORM=wayland
+    else
+        CAPTUREOS_OZONE_PLATFORM=x11
+    fi
 fi
 KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
+echo "chromium ozone platform: $CAPTUREOS_OZONE_PLATFORM"
 
 launch_kiosk() {
     local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
@@ -392,13 +395,13 @@ echo "booth kiosk launched"
 
 sleep 4
 
-# Verify-and-retry placement: at boot Chromium starts before the second
-# monitor is fully arranged, so windows pile onto one screen. Keep
-# checking where each window actually is and re-place until correct
-# (a manual relaunch verifies on the first pass and exits immediately).
+# Verify-and-retry placement (X11/XWayland only — xdotool and wmctrl
+# cannot see native Wayland windows; labwc rules handle those).
 booth_placed=1
 gallery_placed=1
-if declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
+if [[ "$CAPTUREOS_OZONE_PLATFORM" != "x11" ]]; then
+    echo "wayland mode: placement + fullscreen handled by labwc window rules"
+elif declare -F captureos_ensure_window_layout >/dev/null 2>&1; then
     if [[ "${CAPTUREOS_GALLERY:-1}" == "1" ]]; then
         captureos_ensure_window_layout CaptureOS-Gallery \
             "$CAPTUREOS_GALLERY_X" "$CAPTUREOS_GALLERY_Y" \
@@ -455,23 +458,21 @@ elif declare -F captureos_position_window_class >/dev/null 2>&1; then
     captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
 fi
 
-# Chromium sometimes drops fullscreen shortly after map — nudge again.
-# Remap touch AFTER fullscreen settles: mapping against the extended desktop
-# before the booth window is sized leaves taps offset (shutter too high).
-if declare -F captureos_fullscreen_window_class >/dev/null 2>&1; then
+# X11 only: Chromium sometimes drops fullscreen shortly after map.
+if [[ "$CAPTUREOS_OZONE_PLATFORM" == "x11" ]] \
+    && declare -F captureos_fullscreen_window_class >/dev/null 2>&1; then
     ( sleep 4
       captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
       captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
-      captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" 2>/dev/null || true
       sleep 3
       captureos_fullscreen_window_class CaptureOS-Gallery 2>/dev/null || true
       captureos_fullscreen_window_class CaptureOS-Booth 2>/dev/null || true
-      captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" 2>/dev/null || true
     ) 9>&- &
 fi
 
 if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
     captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true
+    # Touch USB can enumerate after the compositor starts — retry once.
     ( sleep 8
       captureos_map_touch_to_booth "${CAPTUREOS_BOOTH_OUTPUT:-}" || true ) 9>&- &
 fi
