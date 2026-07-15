@@ -230,13 +230,27 @@ BROWSER="$(command -v chromium-browser || command -v chromium)" || {
     echo "chromium not found" >&2
     exit 1
 }
+# Prefer the real binary over the Pi wrapper script (avoids
+# "unrecognized flag --no-decommit-pooled-pages" noise).
+for candidate in \
+    /usr/lib/chromium/chromium \
+    /usr/lib/chromium-browser/chromium-browser \
+    /usr/lib/chromium-browser/chromium; do
+    if [[ -x "$candidate" ]]; then
+        BROWSER="$candidate"
+        break
+    fi
+done
 
+if declare -F captureos_ensure_wayland_env >/dev/null 2>&1; then
+    captureos_ensure_wayland_env || true
+fi
 if declare -F captureos_ensure_x_display >/dev/null 2>&1; then
     captureos_ensure_x_display || true
 fi
 if declare -F captureos_wait_for_displays >/dev/null 2>&1; then
     # Short wait: with one monitor this must not stall the booth.
-    captureos_wait_for_displays 2 5 || true
+    captureos_wait_for_displays 2 8 || true
 fi
 
 # Re-apply dual-display + touch (Screen Configuration often resets on reboot).
@@ -289,24 +303,38 @@ fi
 echo "booth display:   ${CAPTUREOS_BOOTH_OUTPUT:-?} at ${CAPTUREOS_BOOTH_X},${CAPTUREOS_BOOTH_Y} ${CAPTUREOS_BOOTH_W}x${CAPTUREOS_BOOTH_H}"
 echo "gallery display: ${CAPTUREOS_GALLERY_OUTPUT:-?} at ${CAPTUREOS_GALLERY_X},${CAPTUREOS_GALLERY_Y} ${CAPTUREOS_GALLERY_W}x${CAPTUREOS_GALLERY_H}"
 
+# Pin windows to outputs BEFORE Chromium starts (xdotool cannot move
+# Chromium --kiosk windows under labwc/XWayland).
+if declare -F captureos_apply_labwc_window_rules >/dev/null 2>&1; then
+    captureos_apply_labwc_window_rules || true
+fi
+
 if declare -F captureos_kill_kiosk_windows >/dev/null 2>&1; then
     captureos_kill_kiosk_windows
 fi
 
+# Do NOT use --kiosk here: under Pi OS labwc/XWayland it creates unmovable
+# windows that always open on the primary (big) display. Use an app window
+# with explicit size/position; labwc window rules force the right output
+# and fullscreen. (Optional CAPTUREOS_FORCE_KIOSK=1 restores old behaviour.)
 KIOSK_FLAGS=(
-    --kiosk
     --noerrdialogs
     --disable-infobars
     --disable-session-crashed-bubble
     --check-for-update-interval=31536000
     --overscroll-history-navigation=0
     --pull-to-refresh=0
-    # Auto-login has no keyring password — avoid "application wants access
-    # to keyring but it's locked" on booth boot.
     --password-store=basic
     --use-mock-keychain
+    --no-first-run
+    --disable-features=TranslateUI
 )
-# Prefer X11 so --window-position and xdotool can place windows on dual HDMI.
+if [[ "${CAPTUREOS_FORCE_KIOSK:-0}" == "1" ]]; then
+    KIOSK_FLAGS+=(--kiosk)
+else
+    KIOSK_FLAGS+=(--start-fullscreen)
+fi
+# Prefer X11 so --window-position and xdotool/wmctrl can place windows.
 if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
     CAPTUREOS_OZONE_PLATFORM=x11
 fi
@@ -315,12 +343,17 @@ KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
 launch_kiosk() {
     local profile="$1" class="$2" url="$3" x="$4" y="$5" w="$6" h="$7"
     # 9>&- so Chromium does not inherit (and hold) the launcher lock.
+    # Keep --class for xdotool / labwc matching (do not use --app, which
+    # can override WM_CLASS on some Chromium builds).
     "$BROWSER" "${KIOSK_FLAGS[@]}" \
         --class="$class" \
+        --name="$class" \
         --user-data-dir="$LOG_DIR/captureos-profile-${profile}" \
         --window-position="${x},${y}" \
         --window-size="${w},${h}" \
-        "$url" 9>&- &
+        --new-window \
+        "$url" \
+        9>&- &
 }
 
 # Gallery on the wall / main display.

@@ -69,20 +69,30 @@ captureos_position_window_class() {
         return 1
     }
 
-    # Kiosk windows are fullscreen; the WM pins fullscreen windows to their
-    # current monitor, so drop fullscreen before moving and restore after.
-    xdotool windowstate --remove FULLSCREEN "$wid" 2>/dev/null \
-        || { command -v wmctrl >/dev/null 2>&1 \
-             && wmctrl -i -r "$wid" -b remove,fullscreen 2>/dev/null; } \
-        || true
-    sleep 0.2
-    xdotool windowmove "$wid" "$x" "$y" 2>/dev/null || true
-    xdotool windowsize "$wid" "$w" "$h" 2>/dev/null || true
-    sleep 0.2
-    xdotool windowstate --add FULLSCREEN "$wid" 2>/dev/null \
-        || { command -v wmctrl >/dev/null 2>&1 \
-             && wmctrl -i -r "$wid" -b add,fullscreen 2>/dev/null; } \
-        || true
+    # Chromium under XWayland/labwc often ignores move while fullscreen and
+    # reports a fake 10x10 geometry. Drop fullscreen/maximized, move + size
+    # with both xdotool and wmctrl, then fullscreen again.
+    if command -v wmctrl >/dev/null 2>&1; then
+        wmctrl -i -r "$wid" -b remove,fullscreen,maximized_vert,maximized_horz 2>/dev/null || true
+    fi
+    xdotool windowstate --remove FULLSCREEN "$wid" 2>/dev/null || true
+    xdotool windowstate --remove MAXIMIZED_VERT "$wid" 2>/dev/null || true
+    xdotool windowstate --remove MAXIMIZED_HORZ "$wid" 2>/dev/null || true
+    sleep 0.3
+    xdotool windowmove --sync "$wid" "$x" "$y" 2>/dev/null \
+        || xdotool windowmove "$wid" "$x" "$y" 2>/dev/null || true
+    xdotool windowsize --sync "$wid" "$w" "$h" 2>/dev/null \
+        || xdotool windowsize "$wid" "$w" "$h" 2>/dev/null || true
+    if command -v wmctrl >/dev/null 2>&1; then
+        # wmctrl -e gravity,x,y,w,h
+        wmctrl -i -r "$wid" -e "0,${x},${y},${w},${h}" 2>/dev/null || true
+    fi
+    sleep 0.3
+    if command -v wmctrl >/dev/null 2>&1; then
+        wmctrl -i -r "$wid" -b add,fullscreen 2>/dev/null || true
+    else
+        xdotool windowstate --add FULLSCREEN "$wid" 2>/dev/null || true
+    fi
 
     local geom
     geom="$(xdotool getwindowgeometry --shell "$wid" 2>/dev/null | tr '\n' ' ')"
@@ -91,13 +101,36 @@ captureos_position_window_class() {
 }
 
 # True when the window's center sits inside the target rectangle.
+# Reject fake Chromium/XWayland 10x10 geometry (not a trusted reading).
 captureos_window_on_target() {
     local wid="$1" tx="$2" ty="$3" tw="$4" th="$5"
     local X="" Y="" WIDTH="" HEIGHT="" SCREEN=""
     eval "$(xdotool getwindowgeometry --shell "$wid" 2>/dev/null)" || return 1
     [[ -n "$X" && -n "$Y" ]] || return 1
-    local cx=$((X + ${WIDTH:-0} / 2)) cy=$((Y + ${HEIGHT:-0} / 2))
+    if (( ${WIDTH:-0} < 100 || ${HEIGHT:-0} < 100 )); then
+        return 1
+    fi
+    local cx=$((X + WIDTH / 2)) cy=$((Y + HEIGHT / 2))
     (( cx >= tx && cx < tx + tw && cy >= ty && cy < ty + th ))
+}
+
+# Prefer reading from _NET_FRAME_EXTENTS / wmctrl geometry when available.
+captureos_window_center() {
+    local wid="$1"
+    local X="" Y="" WIDTH="" HEIGHT=""
+    if command -v wmctrl >/dev/null 2>&1; then
+        local line
+        line="$(wmctrl -lG 2>/dev/null | awk -v id="$(printf '0x%08x' "$wid")" 'tolower($1)==tolower(id) {print}')"
+        if [[ -n "$line" ]]; then
+            # id desktop x y w h host title...
+            read -r _ _ X Y WIDTH HEIGHT _ <<<"$line"
+        fi
+    fi
+    if [[ -z "$X" || -z "$WIDTH" ]] || (( WIDTH < 100 )); then
+        eval "$(xdotool getwindowgeometry --shell "$wid" 2>/dev/null)" || return 1
+    fi
+    (( ${WIDTH:-0} >= 100 && ${HEIGHT:-0} >= 100 )) || return 1
+    printf '%s %s' "$((X + WIDTH / 2))" "$((Y + HEIGHT / 2))"
 }
 
 # Keep checking (and re-placing) a kiosk window until it really sits on
@@ -106,20 +139,24 @@ captureos_window_on_target() {
 # on one screen; this loop catches up once the layout settles.
 captureos_ensure_window_layout() {
     local class="$1" x="$2" y="$3" w="$4" h="$5" tries="${6:-8}"
-    local i wid
+    local i wid cx cy
     command -v xdotool >/dev/null 2>&1 || return 1
 
     for i in $(seq 1 "$tries"); do
         wid="$(captureos_find_window_by_class "$class" || true)"
         if [[ -n "$wid" ]]; then
-            if captureos_window_on_target "$wid" "$x" "$y" "$w" "$h"; then
-                echo "CaptureOS: ${class} verified at ${x},${y} (attempt ${i})"
-                return 0
+            if read -r cx cy < <(captureos_window_center "$wid"); then
+                if (( cx >= x && cx < x + w && cy >= y && cy < y + h )); then
+                    echo "CaptureOS: ${class} verified at ${x},${y} center=${cx},${cy} (attempt ${i})"
+                    return 0
+                fi
             fi
             captureos_position_window_class "$class" "$x" "$y" "$w" "$h" || true
-            if captureos_window_on_target "$wid" "$x" "$y" "$w" "$h"; then
-                echo "CaptureOS: ${class} moved to ${x},${y} (attempt ${i})"
-                return 0
+            if read -r cx cy < <(captureos_window_center "$wid"); then
+                if (( cx >= x && cx < x + w && cy >= y && cy < y + h )); then
+                    echo "CaptureOS: ${class} moved to ${x},${y} center=${cx},${cy} (attempt ${i})"
+                    return 0
+                fi
             fi
         fi
         sleep 2

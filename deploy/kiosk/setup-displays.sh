@@ -58,4 +58,8 @@ if declare -F captureos_map_touch_to_booth >/dev/null 2>&1; then
     done
 fi
 
+if declare -F captureos_apply_labwc_window_rules >/dev/null 2>&1; then
+    captureos_apply_labwc_window_rules || true
+fi
+
 echo "[$(date '+%F %T')] CaptureOS display setup done"

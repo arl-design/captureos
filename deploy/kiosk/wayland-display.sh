@@ -3,13 +3,32 @@
 # kanshi so Screen Configuration does not need to be set by hand each boot.
 
 captureos_is_wayland_session() {
-    [[ -n "${WAYLAND_DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]
+    [[ -n "${WAYLAND_DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == "wayland" ]] \
+        || [[ -n "${XDG_RUNTIME_DIR:-}" && -S "${XDG_RUNTIME_DIR}/wayland-0" ]]
 }
 
-# xrandr names (HDMI-1) vs wlr-randr names (HDMI-A-1) on Raspberry Pi OS.
+# Autostart often does not set WAYLAND_DISPLAY; wlr-randr needs it.
+captureos_ensure_wayland_env() {
+    if [[ -z "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
+        if [[ -S "${XDG_RUNTIME_DIR}/wayland-1" ]]; then
+            export WAYLAND_DISPLAY=wayland-1
+        elif [[ -S "${XDG_RUNTIME_DIR}/wayland-0" ]]; then
+            export WAYLAND_DISPLAY=wayland-0
+        fi
+    fi
+    if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
+        export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    fi
+}
+
+# xrandr names (HDMI-1) vs wlr-randr names (HDMI-A-1). On Pi OS
+# XWayland, xrandr already reports HDMI-A-* — leave those alone.
 captureos_to_wlr_output() {
     local name="$1"
     case "$name" in
+        HDMI-A-*|DSI-*|DPI-*)
+            printf '%s' "$name"
+            ;;
         HDMI-[0-9]*)
             printf 'HDMI-A-%s' "${name#HDMI-}"
             ;;
@@ -21,14 +40,100 @@ captureos_to_wlr_output() {
 
 captureos_to_xrandr_output() {
     local name="$1"
+    # Prefer names that xrandr actually lists (Pi XWayland uses HDMI-A-*).
+    if xrandr --query 2>/dev/null | grep -q "^${name} connected"; then
+        printf '%s' "$name"
+        return 0
+    fi
     case "$name" in
         HDMI-A-[0-9]*)
-            printf 'HDMI-%s' "${name#HDMI-A-}"
+            local alt="HDMI-${name#HDMI-A-}"
+            if xrandr --query 2>/dev/null | grep -q "^${alt} connected"; then
+                printf '%s' "$alt"
+                return 0
+            fi
             ;;
-        *)
-            printf '%s' "$name"
+        HDMI-[0-9]*)
+            local alt="HDMI-A-${name#HDMI-}"
+            if xrandr --query 2>/dev/null | grep -q "^${alt} connected"; then
+                printf '%s' "$alt"
+                return 0
+            fi
             ;;
     esac
+    printf '%s' "$name"
+}
+
+# Pin Chromium booth/gallery windows to the correct outputs via labwc.
+# xdotool cannot move Chromium --kiosk windows under XWayland (they report
+# 10x10 @ 10,10), so window rules are the reliable path on Pi OS Bookworm+.
+captureos_apply_labwc_window_rules() {
+    local booth_out gallery_out
+    booth_out="$(captureos_to_wlr_output "${CAPTUREOS_BOOTH_OUTPUT:-}")"
+    gallery_out="$(captureos_to_wlr_output "${CAPTUREOS_GALLERY_OUTPUT:-}")"
+    [[ -n "$booth_out" ]] || return 0
+
+    local rc="${XDG_CONFIG_HOME:-$HOME/.config}/labwc/rc.xml"
+    mkdir -p "$(dirname "$rc")"
+
+    python3 - "$rc" "$booth_out" "$gallery_out" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+rc_path, booth_out, gallery_out = sys.argv[1:4]
+path = Path(rc_path)
+ns = "{http://openbox.org/3.4/rc}"
+ET.register_namespace("", "http://openbox.org/3.4/rc")
+
+if path.is_file():
+    tree = ET.parse(path)
+    root = tree.getroot()
+else:
+    root = ET.Element(f"{ns}openbox_config")
+    tree = ET.ElementTree(root)
+
+# Drop previous CaptureOS window rules (clean re-apply).
+for rules in list(root):
+    if rules.tag.split("}", 1)[-1] != "windowRules":
+        continue
+    for rule in list(rules):
+        if rule.tag.split("}", 1)[-1] != "windowRule":
+            continue
+        ident = rule.get("identifier") or ""
+        if ident.startswith("CaptureOS-"):
+            rules.remove(rule)
+    if len(list(rules)) == 0:
+        root.remove(rules)
+
+rules = None
+for child in root:
+    if child.tag.split("}", 1)[-1] == "windowRules":
+        rules = child
+        break
+if rules is None:
+    rules = ET.SubElement(root, f"{ns}windowRules")
+
+def add_rule(ident, output):
+    if not output:
+        return
+    rule = ET.SubElement(rules, f"{ns}windowRule")
+    rule.set("identifier", ident)
+    rule.set("output", output)
+    rule.set("fullscreen", "yes")
+
+add_rule("CaptureOS-Booth", booth_out)
+add_rule("CaptureOS-Gallery", gallery_out or "")
+
+tree.write(path, encoding="unicode", xml_declaration=True)
+print(f"CaptureOS: labwc window rules booth->{booth_out} gallery->{gallery_out or '(n/a)'}")
+PY
+
+    if command -v labwc >/dev/null 2>&1; then
+        labwc --reconfigure 2>/dev/null || pkill -HUP labwc 2>/dev/null || true
+        sleep 0.5
+    fi
+    return 0
 }
 
 # Parse real wlr-randr output. The current mode is NOT on the header line:
@@ -178,41 +283,58 @@ captureos_wait_for_wayland_displays() {
 
 # Full Wayland setup: detect layout, extend desktop, persist kanshi.
 captureos_setup_wayland_displays() {
+    captureos_ensure_wayland_env
     captureos_is_wayland_session || return 1
-    command -v wlr-randr >/dev/null 2>&1 || return 1
 
-    captureos_wait_for_wayland_displays 2 "${CAPTUREOS_DISPLAY_WAIT:-8}" || true
+    # Prefer reading layout from xrandr when it works (Pi XWayland reports
+    # HDMI-A-* there). wlr-randr often fails from autostart without
+    # WAYLAND_DISPLAY, which previously left us guessing blindly.
+    if declare -F captureos_collect_xrandr_displays >/dev/null 2>&1 \
+        && captureos_collect_xrandr_displays \
+        && ((${#CAPTUREOS_DISPLAY_LINES[@]} >= 1)); then
+        CAPTUREOS_DISPLAY_BACKEND=xrandr
+        if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
+            captureos_resolve_display_layout || true
+        fi
+        if declare -F captureos_arrange_extended_desktop >/dev/null 2>&1; then
+            captureos_arrange_extended_desktop || true
+            captureos_resolve_display_layout || true
+        fi
+    fi
+
+    if command -v wlr-randr >/dev/null 2>&1; then
+        captureos_wait_for_wayland_displays 2 "${CAPTUREOS_DISPLAY_WAIT:-5}" || true
+        if captureos_collect_wlr_displays 2>/dev/null \
+            && ((${#CAPTUREOS_DISPLAY_LINES[@]} >= 2)); then
+            CAPTUREOS_DISPLAY_BACKEND=wlr-randr
+            if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
+                captureos_resolve_display_layout || true
+            fi
+            local entry name w h x y primary rate
+            local -a xs=() ys=()
+            for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
+                IFS='|' read -r name w h x y primary rate <<<"$entry"
+                xs+=("$x")
+                ys+=("$y")
+            done
+            if [[ "${xs[0]}" == "${xs[1]}" && "${ys[0]}" == "${ys[1]}" ]]; then
+                echo "CaptureOS: Wayland displays mirrored — switching to extended"
+                captureos_auto_assign_displays
+                captureos_apply_display_entry GALLERY "$CAPTUREOS_AUTO_GALLERY"
+                captureos_apply_display_entry BOOTH "$CAPTUREOS_AUTO_BOOTH"
+                CAPTUREOS_GALLERY_X=0
+                CAPTUREOS_GALLERY_Y=0
+                CAPTUREOS_BOOTH_X=$((CAPTUREOS_GALLERY_X + CAPTUREOS_GALLERY_W))
+                CAPTUREOS_BOOTH_Y="${CAPTUREOS_GALLERY_Y}"
+            fi
+            captureos_apply_wayland_layout || true
+            captureos_write_kanshi_config || true
+        fi
+    fi
 
     if declare -F captureos_resolve_display_layout >/dev/null 2>&1; then
-        if captureos_collect_wlr_displays 2>/dev/null; then
-            CAPTUREOS_DISPLAY_BACKEND=wlr-randr
-        fi
-        captureos_resolve_display_layout || return 1
+        captureos_resolve_display_layout || true
     fi
-
-    # If both outputs share the same origin they are mirrored — extend them.
-    if captureos_collect_wlr_displays && ((${#CAPTUREOS_DISPLAY_LINES[@]} >= 2)); then
-        local entry name w h x y primary rate
-        local -a xs=() ys=()
-        for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
-            IFS='|' read -r name w h x y primary rate <<<"$entry"
-            xs+=("$x")
-            ys+=("$y")
-        done
-        if [[ "${xs[0]}" == "${xs[1]}" && "${ys[0]}" == "${ys[1]}" ]]; then
-            echo "CaptureOS: Wayland displays mirrored — switching to extended"
-            captureos_auto_assign_displays
-            captureos_apply_display_entry GALLERY "$CAPTUREOS_AUTO_GALLERY"
-            captureos_apply_display_entry BOOTH "$CAPTUREOS_AUTO_BOOTH"
-            CAPTUREOS_GALLERY_X=0
-            CAPTUREOS_GALLERY_Y=0
-            CAPTUREOS_BOOTH_X=$((CAPTUREOS_GALLERY_X + CAPTUREOS_GALLERY_W))
-            CAPTUREOS_BOOTH_Y="${CAPTUREOS_GALLERY_Y}"
-        fi
-    fi
-
-    captureos_apply_wayland_layout || true
-    captureos_write_kanshi_config || true
-    captureos_resolve_display_layout || true
+    captureos_apply_labwc_window_rules || true
     return 0
 }

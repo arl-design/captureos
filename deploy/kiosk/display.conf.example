@@ -5,9 +5,10 @@
 # CaptureOS applies this automatically on every boot — you should not need
 # to re-open Pi OS Screen Configuration after a reboot.
 #
-# Assign by output name (from wlr-randr or xrandr):
-# CAPTUREOS_BOOTH_OUTPUT=HDMI-A-2
-# CAPTUREOS_GALLERY_OUTPUT=HDMI-A-1
+# Assign by output name (from wlr-randr / xrandr — on Pi OS these are
+# usually HDMI-A-1 / HDMI-A-2, not HDMI-1 / HDMI-2):
+# CAPTUREOS_BOOTH_OUTPUT=HDMI-A-1
+# CAPTUREOS_GALLERY_OUTPUT=HDMI-A-2
 #
 # xrandr-style names also work (HDMI-1, HDMI-2).
 #
