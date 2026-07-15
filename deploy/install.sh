@@ -69,9 +69,20 @@ install -m 644 "$REPO_DIR/deploy/desktop/captureos-icon.png" "$APP_DIR/captureos
 install -m 644 "$REPO_DIR/deploy/desktop/captureos.desktop" \
     /usr/share/applications/captureos.desktop
 install -d -m 755 /etc/captureos
+install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
+    /etc/captureos/display.conf.example
 if [[ ! -f /etc/captureos/display.conf ]]; then
     install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
         /etc/captureos/display.conf
+elif grep -qE '^[[:space:]]*CAPTUREOS_(BOOTH|GALLERY)_OUTPUT=' /etc/captureos/display.conf \
+    && ! grep -qE '^[[:space:]]*CAPTUREOS_(BOOTH|GALLERY)_MODE=' /etc/captureos/display.conf; then
+    # Port names flip when cables move — migrate to resolution matching.
+    bak="/etc/captureos/display.conf.bak.$(date +%Y%m%d%H%M%S)"
+    cp -a /etc/captureos/display.conf "$bak"
+    install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
+        /etc/captureos/display.conf
+    echo "   Migrated /etc/captureos/display.conf to resolution-based matching."
+    echo "   Previous file saved as $bak"
 fi
 
 echo "==> Allowing passwordless service control for the kiosk user"

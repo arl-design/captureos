@@ -302,6 +302,9 @@ fi
 
 echo "booth display:   ${CAPTUREOS_BOOTH_OUTPUT:-?} at ${CAPTUREOS_BOOTH_X},${CAPTUREOS_BOOTH_Y} ${CAPTUREOS_BOOTH_W}x${CAPTUREOS_BOOTH_H}"
 echo "gallery display: ${CAPTUREOS_GALLERY_OUTPUT:-?} at ${CAPTUREOS_GALLERY_X},${CAPTUREOS_GALLERY_Y} ${CAPTUREOS_GALLERY_W}x${CAPTUREOS_GALLERY_H}"
+if declare -F captureos_log_display_map >/dev/null 2>&1; then
+    captureos_log_display_map
+fi
 
 # Pin windows to outputs BEFORE Chromium starts (xdotool cannot move
 # Chromium --kiosk windows under labwc/XWayland).

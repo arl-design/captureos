@@ -123,6 +123,48 @@ captureos_apply_display_entry() {
     printf -v "CAPTUREOS_${prefix}_RATE" '%s' "${rate:-60}"
 }
 
+captureos_lookup_display_by_mode() {
+    # Match "1024x600" (optionally "1024x600@60") against connected displays.
+    local want="$1" entry name w h x y primary rate mode
+    want="${want%%@*}"
+    for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
+        IFS='|' read -r name w h x y primary rate <<<"$entry"
+        mode="${w}x${h}"
+        [[ "$mode" == "$want" ]] || continue
+        CAPTUREOS_RESOLVED_NAME="$name"
+        CAPTUREOS_RESOLVED_W="$w"
+        CAPTUREOS_RESOLVED_H="$h"
+        CAPTUREOS_RESOLVED_X="$x"
+        CAPTUREOS_RESOLVED_Y="$y"
+        return 0
+    done
+    return 1
+}
+
+# Clear boot-time map so you can see which connector is which.
+captureos_log_display_map() {
+    echo "----- CaptureOS display map -----"
+    echo "backend: ${CAPTUREOS_DISPLAY_BACKEND:-unknown}"
+    local entry name w h x y primary rate role
+    if ((${#CAPTUREOS_DISPLAY_LINES[@]} > 0)); then
+        for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
+            IFS='|' read -r name w h x y primary rate <<<"$entry"
+            role="(unused)"
+            [[ "$name" == "${CAPTUREOS_BOOTH_OUTPUT:-}" ]] && role="BOOTH (touchscreen UI)"
+            [[ "$name" == "${CAPTUREOS_GALLERY_OUTPUT:-}" ]] && role="GALLERY (wall display)"
+            printf '  %-10s %4dx%-4d at +%-5s+%-5s  -> %s\n' \
+                "$name" "$w" "$h" "$x" "$y" "$role"
+        done
+    else
+        echo "  (no connected displays detected yet)"
+    fi
+    echo "  tip: HDMI-A-1 / HDMI-A-2 are physical Pi ports, not fixed roles."
+    echo "       CaptureOS prefers resolution (smallest -> booth) so swapping"
+    echo "       cables still works. Prefer CAPTUREOS_BOOTH_MODE=1024x600 over"
+    echo "       hardcoding HDMI-A-1 in display.conf."
+    echo "---------------------------------"
+}
+
 # Sets CAPTUREOS_BOOTH_{X,Y,W,H,OUTPUT} and CAPTUREOS_GALLERY_{X,Y,W,H,OUTPUT}.
 # Returns 0 on success, 1 if no layout could be resolved.
 captureos_resolve_display_layout() {
@@ -160,6 +202,11 @@ captureos_resolve_display_layout() {
     captureos_auto_assign_displays
 
     # --- booth -----------------------------------------------------------
+    # Preference order (most stable first):
+    #   1) explicit geometry
+    #   2) resolution match (1024x600) — survives HDMI port swaps
+    #   3) connector name (HDMI-A-1) — fragile if cables move
+    #   4) auto: smallest panel
     if [[ -n "${CAPTUREOS_BOOTH_GEOM:-}" ]]; then
         captureos_parse_geom "$CAPTUREOS_BOOTH_GEOM" "CAPTUREOS_BOOTH_GEOM"
         CAPTUREOS_BOOTH_X="$CAPTUREOS_RESOLVED_X"
@@ -167,9 +214,18 @@ captureos_resolve_display_layout() {
         CAPTUREOS_BOOTH_W="$CAPTUREOS_RESOLVED_W"
         CAPTUREOS_BOOTH_H="$CAPTUREOS_RESOLVED_H"
         CAPTUREOS_BOOTH_OUTPUT="${CAPTUREOS_BOOTH_OUTPUT:-manual}"
+    elif [[ -n "${CAPTUREOS_BOOTH_MODE:-}" ]]; then
+        captureos_lookup_display_by_mode "$CAPTUREOS_BOOTH_MODE" || {
+            echo "CaptureOS: no display matching booth mode '$CAPTUREOS_BOOTH_MODE'" >&2
+            return 1
+        }
+        CAPTUREOS_BOOTH_OUTPUT="$CAPTUREOS_RESOLVED_NAME"
+        CAPTUREOS_BOOTH_X="$CAPTUREOS_RESOLVED_X"
+        CAPTUREOS_BOOTH_Y="$CAPTUREOS_RESOLVED_Y"
+        CAPTUREOS_BOOTH_W="$CAPTUREOS_RESOLVED_W"
+        CAPTUREOS_BOOTH_H="$CAPTUREOS_RESOLVED_H"
     elif [[ -n "${CAPTUREOS_BOOTH_OUTPUT:-}" ]]; then
         captureos_lookup_display "$CAPTUREOS_BOOTH_OUTPUT" || {
-            # Allow xrandr-style names when using wlr-randr backend.
             if [[ "${CAPTUREOS_DISPLAY_BACKEND:-}" == "wlr-randr" ]] \
                 && declare -F captureos_to_wlr_output >/dev/null 2>&1; then
                 captureos_lookup_display "$(captureos_to_wlr_output "$CAPTUREOS_BOOTH_OUTPUT")" || {
@@ -198,6 +254,16 @@ captureos_resolve_display_layout() {
         CAPTUREOS_GALLERY_W="$CAPTUREOS_RESOLVED_W"
         CAPTUREOS_GALLERY_H="$CAPTUREOS_RESOLVED_H"
         CAPTUREOS_GALLERY_OUTPUT="${CAPTUREOS_GALLERY_OUTPUT:-manual}"
+    elif [[ -n "${CAPTUREOS_GALLERY_MODE:-}" ]]; then
+        captureos_lookup_display_by_mode "$CAPTUREOS_GALLERY_MODE" || {
+            echo "CaptureOS: no display matching gallery mode '$CAPTUREOS_GALLERY_MODE'" >&2
+            return 1
+        }
+        CAPTUREOS_GALLERY_OUTPUT="$CAPTUREOS_RESOLVED_NAME"
+        CAPTUREOS_GALLERY_X="$CAPTUREOS_RESOLVED_X"
+        CAPTUREOS_GALLERY_Y="$CAPTUREOS_RESOLVED_Y"
+        CAPTUREOS_GALLERY_W="$CAPTUREOS_RESOLVED_W"
+        CAPTUREOS_GALLERY_H="$CAPTUREOS_RESOLVED_H"
     elif [[ -n "${CAPTUREOS_GALLERY_OUTPUT:-}" ]]; then
         captureos_lookup_display "$CAPTUREOS_GALLERY_OUTPUT" || {
             if [[ "${CAPTUREOS_DISPLAY_BACKEND:-}" == "wlr-randr" ]] \
@@ -230,6 +296,7 @@ captureos_print_displays() {
         return 1
     fi
     captureos_auto_assign_displays
+    captureos_resolve_display_layout 2>/dev/null || true
     echo "Connected displays (via xrandr):"
     local entry name w h x y primary
     for entry in "${CAPTUREOS_DISPLAY_LINES[@]}"; do
@@ -238,13 +305,17 @@ captureos_print_displays() {
             "$name" "$w" "$h" "$x" "$y" "$([[ "$primary" == 1 ]] && echo ' [primary]' || true)"
     done
     echo
-    IFS='|' read -r _ bw bh bx by _ <<<"$CAPTUREOS_AUTO_BOOTH"
-    IFS='|' read -r _ gw gh gx gy _ <<<"$CAPTUREOS_AUTO_GALLERY"
-    echo "Auto-assignment (smallest -> booth, largest -> gallery):"
-    echo "  Booth:   ${CAPTUREOS_AUTO_BOOTH%%|*}  ->  ${bx},${by} ${bw}x${bh}"
-    echo "  Gallery: ${CAPTUREOS_AUTO_GALLERY%%|*}  ->  ${gx},${gy} ${gw}x${gh}"
+    echo "Pi port reminder (Pi 4/5):"
+    echo "  HDMI-A-1 = HDMI0 (port nearest the USB-C power connector)"
+    echo "  HDMI-A-2 = HDMI1 (the other HDMI port)"
+    echo "  Those names are physical sockets — they do NOT follow the screen."
     echo
-    echo "To override, create ~/.config/captureos/display.conf:"
-    echo "  CAPTUREOS_BOOTH_OUTPUT=${CAPTUREOS_AUTO_BOOTH%%|*}"
-    echo "  CAPTUREOS_GALLERY_OUTPUT=${CAPTUREOS_AUTO_GALLERY%%|*}"
+    captureos_log_display_map
+    echo
+    echo "Recommended (stable across cable swaps) — use resolution, not port name:"
+    echo "  CAPTUREOS_BOOTH_MODE=1024x600"
+    echo "  CAPTUREOS_GALLERY_MODE=1920x1080"
+    echo
+    echo "Or leave both unset and CaptureOS auto-picks smallest -> booth,"
+    echo "largest -> gallery."
 }

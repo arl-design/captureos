@@ -1,30 +1,35 @@
 # CaptureOS display layout (optional).
 # Copy to /etc/captureos/display.conf or ~/.config/captureos/display.conf
-# and uncomment/adjust after running:  captureos-launch.sh --list-displays
+# and adjust after running:  captureos-launch.sh --list-displays
 #
-# CaptureOS applies this automatically on every boot — you should not need
-# to re-open Pi OS Screen Configuration after a reboot.
+# CaptureOS applies this automatically on every boot.
 #
-# Assign by output name (from wlr-randr / xrandr — on Pi OS these are
-# usually HDMI-A-1 / HDMI-A-2, not HDMI-1 / HDMI-2):
+# === Recommended: match by RESOLUTION (survives HDMI cable swaps) ===
+# Your touchscreen is 1024x600; the wall TV is typically 1920x1080.
+CAPTUREOS_BOOTH_MODE=1024x600
+CAPTUREOS_GALLERY_MODE=1920x1080
+#
+# Or leave both commented out — CaptureOS auto-picks the smallest panel
+# as the booth and the largest as the gallery.
+#
+# === Fragile: match by connector name ===
+# HDMI-A-1 / HDMI-A-2 are physical ports on the Pi board (HDMI0 near
+# USB-C power, HDMI1 the other). They do NOT mean "touchscreen" /
+# "TV". If you swap the cables, these names stay on the ports and the
+# assignment will be wrong. Prefer CAPTUREOS_*_MODE above.
 # CAPTUREOS_BOOTH_OUTPUT=HDMI-A-1
 # CAPTUREOS_GALLERY_OUTPUT=HDMI-A-2
-#
-# xrandr-style names also work (HDMI-1, HDMI-2).
 #
 # Or assign by pixel geometry (x,y,width,height):
 # CAPTUREOS_BOOTH_GEOM=1920,0,1024,600
 # CAPTUREOS_GALLERY_GEOM=0,0,1920,1080
 #
 # Touch mapping (if auto-detect picks the wrong device):
-# CAPTUREOS_TOUCH_DEVICE="ILITEK ILITEK-TP"       # xinput name
-# CAPTUREOS_TOUCH_DEVICE_ID=8
-# CAPTUREOS_TOUCH_LIBINPUT="10-0038 generic ft5x06 (79)"  # libinput name (Wayland)
+# CAPTUREOS_TOUCH_DEVICE="QDtech MPI7003"
+# CAPTUREOS_TOUCH_LIBINPUT="QDtech MPI7003 (USB 1-1)"
 #
-# Touchscreen mode enforced at boot: multitouch (no) works with the
-# dual-screen kiosk. Set to yes only if you need mouse emulation:
+# Touchscreen mode: multitouch (no) works with the dual-screen kiosk.
 # CAPTUREOS_TOUCH_MOUSE_EMULATION=no
 #
-# Set to 0 to leave Pi OS kanshi / labwc touch config untouched:
 # CAPTUREOS_MANAGE_KANSHI=1
 # CAPTUREOS_MANAGE_LABWC_TOUCH=1
