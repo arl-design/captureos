@@ -157,18 +157,16 @@ def add_rule(*, ident=None, title=None, x=None, y=None, w=None, h=None, output=N
         rule.set("identifier", ident)
     if title:
         rule.set("title", title)
-    # Stop Chromium repositioning itself under XWayland after we place it.
-    rule.set("ignoreConfigureRequest", "yes")
     rule.set("serverDecoration", "no")
+    # Order matters: MoveToOutput is a no-op on maximized/fullscreen
+    # windows, so relocate FIRST while the window is still normal, then
+    # fullscreen it (fullscreen fills whichever output it is on).
+    if output:
+        add_action(rule, "MoveToOutput", output=output)
     if x is not None and y is not None:
         add_action(rule, "MoveTo", x=x, y=y)
     if w is not None and h is not None:
         add_action(rule, "ResizeTo", width=w, height=h)
-    if output:
-        add_action(rule, "MoveToOutput", output=output)
-    # Fill the output, then go fullscreen (kiosk look). Do this only once —
-    # a second ToggleFullscreen would leave the window windowed again.
-    add_action(rule, "Maximize")
     add_action(rule, "ToggleFullscreen")
 
 

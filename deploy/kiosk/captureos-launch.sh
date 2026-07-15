@@ -331,7 +331,6 @@ KIOSK_FLAGS=(
     --no-first-run
     --disable-features=TranslateUI
     --disable-pinch
-    --start-maximized
 )
 if [[ "${CAPTUREOS_FORCE_KIOSK:-0}" == "1" ]]; then
     KIOSK_FLAGS+=(--kiosk --kiosk-printing)
@@ -349,6 +348,11 @@ if [[ -z "${CAPTUREOS_OZONE_PLATFORM:-}" ]]; then
     fi
 fi
 KIOSK_FLAGS+=(--ozone-platform="$CAPTUREOS_OZONE_PLATFORM")
+if [[ "$CAPTUREOS_OZONE_PLATFORM" == "x11" ]]; then
+    # On Wayland, maximized-at-map windows cannot be moved between
+    # outputs by labwc rules — keep windows normal there.
+    KIOSK_FLAGS+=(--start-maximized)
+fi
 echo "chromium ozone platform: $CAPTUREOS_OZONE_PLATFORM"
 
 launch_kiosk() {
