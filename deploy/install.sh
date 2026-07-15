@@ -74,14 +74,15 @@ install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
 if [[ ! -f /etc/captureos/display.conf ]]; then
     install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
         /etc/captureos/display.conf
-elif grep -qE '^[[:space:]]*CAPTUREOS_(BOOTH|GALLERY)_OUTPUT=' /etc/captureos/display.conf \
-    && ! grep -qE '^[[:space:]]*CAPTUREOS_(BOOTH|GALLERY)_MODE=' /etc/captureos/display.conf; then
-    # Port names flip when cables move — migrate to resolution matching.
+elif grep -qE '^[[:space:]]*CAPTUREOS_(BOOTH|GALLERY)_(OUTPUT|MODE)=' /etc/captureos/display.conf; then
+    # Older installs pinned HDMI port names or a fixed 1024x600 booth mode.
+    # That breaks when cables move or the customer DSI panel has another res.
+    # Migrate to commented auto-assign (DSI -> booth when present).
     bak="/etc/captureos/display.conf.bak.$(date +%Y%m%d%H%M%S)"
     cp -a /etc/captureos/display.conf "$bak"
     install -m 644 "$REPO_DIR/deploy/kiosk/display.conf.example" \
         /etc/captureos/display.conf
-    echo "   Migrated /etc/captureos/display.conf to resolution-based matching."
+    echo "   Migrated /etc/captureos/display.conf to auto display assign."
     echo "   Previous file saved as $bak"
 fi
 

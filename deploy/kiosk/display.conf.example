@@ -4,32 +4,25 @@
 #
 # CaptureOS applies this automatically on every boot.
 #
-# === Recommended: match by RESOLUTION (survives HDMI cable swaps) ===
-# Your touchscreen is 1024x600; the wall TV is typically 1920x1080.
-CAPTUREOS_BOOTH_MODE=1024x600
-CAPTUREOS_GALLERY_MODE=1920x1080
+# === Default (recommended): leave the lines below COMMENTED ===
+# Auto-assign does the right thing without knowing resolutions:
+#   * DSI/DPI panel -> booth (customer touchscreen), any resolution
+#   * otherwise the smallest HDMI panel -> booth
+#   * largest remaining panel -> gallery (wall TV)
 #
-# Or leave both commented out — CaptureOS auto-picks:
-#   * a DSI/DPI panel as the booth when present (customer touchscreen),
-#   * otherwise the smallest HDMI panel as booth,
-#   * the largest remaining panel as gallery.
-#
-# When you switch to a DSI booth panel this weekend, either leave MODE
-# unset (auto) or set e.g.:
+# === Optional: pin by RESOLUTION (only if auto is wrong) ===
+# Use the sizes from --list-displays for YOUR screens, e.g.:
 # CAPTUREOS_BOOTH_MODE=800x480
 # CAPTUREOS_GALLERY_MODE=1920x1080
-# (or CAPTUREOS_BOOTH_OUTPUT=DSI-1 if you prefer an explicit connector)
 #
-# === Fragile: match by connector name ===
-# HDMI-A-1 / HDMI-A-2 are physical ports on the Pi board (HDMI0 near
-# USB-C power, HDMI1 the other). They do NOT mean "touchscreen" /
-# "TV". If you swap the cables, these names stay on the ports and the
-# assignment will be wrong. Prefer CAPTUREOS_*_MODE above.
-# CAPTUREOS_BOOTH_OUTPUT=HDMI-A-1
-# CAPTUREOS_GALLERY_OUTPUT=HDMI-A-2
+# === Fragile: pin by connector name ===
+# HDMI-A-1 / HDMI-A-2 are physical Pi ports (not "touchscreen"/"TV").
+# DSI panels appear as DSI-1. Prefer auto or *_MODE over these.
+# CAPTUREOS_BOOTH_OUTPUT=DSI-1
+# CAPTUREOS_GALLERY_OUTPUT=HDMI-A-1
 #
 # Or assign by pixel geometry (x,y,width,height):
-# CAPTUREOS_BOOTH_GEOM=1920,0,1024,600
+# CAPTUREOS_BOOTH_GEOM=1920,0,800,480
 # CAPTUREOS_GALLERY_GEOM=0,0,1920,1080
 #
 # Touch mapping (if auto-detect picks the wrong device):
