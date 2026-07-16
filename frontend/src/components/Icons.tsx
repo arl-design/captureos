@@ -28,7 +28,7 @@ export function CameraIcon(props: IconProps) {
   return (
     <svg {...svgProps(props)}>
       <path d="M9.4 4a2 2 0 0 0-1.6.8L6.7 6.3H5a3 3 0 0 0-3 3V17a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V9.3a3 3 0 0 0-3-3h-1.7l-1.1-1.5a2 2 0 0 0-1.6-.8H9.4Z" />
-      <circle cx="12" cy="13" r="3.4" fill="var(--icon-contrast, #ffd400)" />
+      <circle cx="12" cy="13" r="3.4" fill="var(--icon-contrast, #5cddad)" />
       <circle cx="12" cy="13" r="1.9" />
     </svg>
   );

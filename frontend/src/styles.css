@@ -1,24 +1,78 @@
-/* CaptureOS — black & yellow design system.
-   Booth targets a 10.1" 1024x600 landscape touchscreen (iPistBit,
-   HDMI + USB touch); a stacked layout keeps small portrait panels
-   working too. The wall gallery targets a 1080p display. */
+/* CaptureOS v2 — NMI design language.
+   Booth targets a 10.1" 1024x600 landscape touchscreen; stacked layout
+   keeps small portrait panels working. Wall gallery targets 1080p.
+   Green means "do this." Purple is atmosphere. No red. */
 
-:root {
-  --yellow: #ffd400;
-  --yellow-deep: #eab800;
-  --bg: #0a0a0c;
-  --panel: #141417;
-  --card: #1b1b1f;
-  --border: #2b2b31;
-  --text: #f5f5f7;
-  --muted: #9a9aa2;
-  --green: #2ecc40;
-  --red: #e5484d;
-  font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    "DejaVu Sans", Arial, sans-serif;
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/PublicSans-Regular.woff2') format('woff2');
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/PublicSans-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/PublicSans-ExtraBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('/fonts/PublicSans-Black.woff2') format('woff2');
+}
+
+:root {
+  --bg: #0c0a12;
+  --surface: #161222;
+  --panel: var(--surface);
+  --card: #1c1729;
+  --line: rgba(255, 255, 255, 0.06);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --border: var(--line-strong);
+
+  --purple: #32165d;
+  --purple-lt: #bd8dff;
+  --purple-wash: #1e1338;
+
+  --green: #5cddad;
+  --green-dim: rgba(92, 221, 173, 0.1);
+  --green-glow: rgba(92, 221, 173, 0.25);
+  --green-ink: #06231a;
+
+  --text: #ece9f3;
+  --text-dim: #6a6182;
+  --muted: var(--text-dim);
+
+  --warn: #f5a623;
+
+  --font: 'Public Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+
+  font-family: var(--font);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
 
 html, body, #root { height: 100%; }
 
@@ -29,23 +83,95 @@ body {
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
+  font-family: var(--font);
 }
 
-button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font);
+}
 
 .dot {
   display: inline-block;
-  width: 0.6em;
-  height: 0.6em;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   margin-right: 0.45em;
   vertical-align: baseline;
 }
 
-.dot.good { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.dot.bad { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.dot.good { background: var(--green); }
+.dot.bad { background: var(--warn); }
 
 .muted { color: var(--muted); }
+
+.accent { color: var(--green); }
+
+/* ---------- shared buttons ---------- */
+
+.btn {
+  font-family: var(--font);
+  border: none;
+  cursor: pointer;
+  font-weight: 800;
+  border-radius: 999px;
+  letter-spacing: -0.01em;
+  transition: transform 0.12s ease, box-shadow 0.3s ease;
+  touch-action: manipulation;
+}
+
+.btn:active { transform: scale(0.95); }
+
+.btn-primary {
+  background: var(--green);
+  color: var(--green-ink);
+  padding: 1.1em 2.4em;
+  font-size: clamp(1rem, 2.4vw, 1.375rem);
+  box-shadow: 0 0 0 0 var(--green-glow), 0 8px 32px rgba(92, 221, 173, 0.2);
+}
+
+.btn-primary.pulse {
+  animation: pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--green-glow), 0 8px 32px rgba(92, 221, 173, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 20px rgba(92, 221, 173, 0), 0 8px 32px rgba(92, 221, 173, 0.3);
+  }
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1.5px solid var(--line-strong);
+  padding: 0.9em 1.8em;
+  font-size: clamp(0.9rem, 2vw, 1rem);
+  font-weight: 800;
+}
+
+/* Screen breathe-in */
+
+.screen {
+  opacity: 0;
+  transform: scale(0.97);
+  pointer-events: none;
+  transition:
+    opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.screen.on {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
 
 /* ---------- booth (small touch panel) ---------- */
 
@@ -61,21 +187,39 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--yellow);
-  color: #111;
-  padding: 0.4em 0.7em;
+  background: transparent;
+  color: var(--text);
+  padding: 0.55em 1em;
   font-weight: 800;
-  font-size: clamp(0.85rem, 5vw, 1.3rem);
+  font-size: clamp(0.85rem, 5vw, 1.15rem);
   flex: 0 0 auto;
+  border-bottom: 1px solid var(--line);
 }
 
 .booth-topbar .icon-btn {
   display: flex;
-  padding: 0.15em;
-  --icon-contrast: var(--yellow);
+  padding: 0.25em;
+  color: var(--text-dim);
+  --icon-contrast: var(--bg);
+  border-radius: 999px;
 }
 
-.booth-brand { letter-spacing: 0.01em; }
+.booth-topbar .icon-btn:active { color: var(--text); }
+
+.booth-brand {
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+.booth-eyebrow {
+  display: inline-block;
+  color: var(--purple-lt);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  margin-bottom: 0.5em;
+}
 
 .booth-home {
   position: relative;
@@ -86,6 +230,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   flex-direction: column;
   padding: 2.5% 4%;
   gap: 2.5%;
+  background: radial-gradient(ellipse 120% 80% at 50% -5%, var(--purple-wash) 0%, var(--bg) 55%);
 }
 
 /* Landscape touchscreen (the booth's 1024x600 panel): live preview
@@ -111,21 +256,15 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
     grid-area: capture;
     align-self: center;
     justify-self: center;
-    /* Keep shutter clear of the bottom nav — touch Y-offset was
-       making Full Screen taps land on the yellow button. */
+    /* Keep Start clear of the bottom nav — touch Y-offset was
+       making Full Screen taps land on the primary button. */
     padding-bottom: 1.25rem;
     margin-bottom: 0.25rem;
   }
 
-  .booth-home .capture-fab-inline {
-    width: clamp(5.5rem, 18vw, 9rem);
-    height: clamp(5.5rem, 18vw, 9rem);
-  }
-
-  .booth-heading h1 { font-size: clamp(1.1rem, 3.2vw, 2rem); }
-  .booth-heading p { font-size: clamp(0.8rem, 1.8vw, 1.2rem); }
-  .capture-fab { width: clamp(5rem, 16vw, 8rem); height: clamp(5rem, 16vw, 8rem); }
-  .booth-topbar { font-size: clamp(1rem, 2.4vw, 1.4rem); }
+  .booth-heading h1 { font-size: clamp(1.6rem, 4.2vw, 2.75rem); }
+  .booth-heading p { font-size: clamp(0.85rem, 1.8vw, 1.15rem); }
+  .booth-topbar { font-size: clamp(0.95rem, 2.2vw, 1.2rem); }
   .camera-status { font-size: clamp(0.75rem, 1.6vw, 1rem); }
   .booth-nav button { font-size: clamp(0.75rem, 1.6vw, 1rem); }
   .error-banner { font-size: clamp(0.75rem, 1.6vw, 1rem); }
@@ -133,12 +272,18 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .booth-heading { text-align: center; flex: 0 0 auto; }
 
-.booth-heading h1 { font-size: clamp(0.85rem, 5.5vw, 1.5rem); font-weight: 700; }
+.booth-heading h1 {
+  font-size: clamp(1.6rem, 7vw, 3rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
 
 .booth-heading p {
-  color: var(--muted);
-  font-size: clamp(0.65rem, 3.8vw, 1rem);
-  margin-top: 0.15em;
+  color: var(--text-dim);
+  font-size: clamp(0.85rem, 3.5vw, 1.15rem);
+  font-weight: 400;
+  margin-top: 0.45em;
 }
 
 .preview-card {
@@ -146,9 +291,9 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -165,13 +310,13 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .camera-status {
   flex: 0 0 auto;
-  padding: 0.35em 0.7em;
+  padding: 0.4em 0.8em;
   font-size: clamp(0.6rem, 3.5vw, 0.9rem);
-  background: rgb(0 0 0 / 45%);
+  color: var(--text-dim);
+  background: rgb(12 10 18 / 55%);
 }
 
-/* Tap-to-focus preview wrapper: catches taps that the pointer-events:none
-   stream image ignores, and hosts the focus ring indicator. */
+/* Tap-to-focus preview wrapper */
 .tap-focus {
   position: relative;
   touch-action: manipulation;
@@ -203,10 +348,10 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   width: 4.2rem;
   height: 4.2rem;
   margin: -2.1rem 0 0 -2.1rem;
-  border: 3px solid var(--accent, #ffcd00);
+  border: 3px solid var(--green);
   border-radius: 50%;
   pointer-events: none;
-  box-shadow: 0 0 12px rgb(255 205 0 / 55%);
+  box-shadow: 0 0 12px var(--green-glow);
   animation: focus-pulse 1.2s ease-out forwards;
 }
 
@@ -226,10 +371,10 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   padding: 0.45em 0.9em;
   font-size: clamp(0.65rem, 3vw, 0.95rem);
   text-align: center;
-  color: #fff;
-  background: rgb(0 0 0 / 70%);
-  border: 1px solid rgb(255 205 0 / 60%);
-  border-radius: 2em;
+  color: var(--text);
+  background: rgb(12 10 18 / 78%);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
   pointer-events: none;
 }
 
@@ -239,23 +384,22 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.75rem;
 }
 
 .capture-fab {
   width: clamp(3.4rem, 30vw, 6rem);
   height: clamp(3.4rem, 30vw, 6rem);
   border-radius: 50%;
-  background: var(--yellow);
-  color: #111;
-  --icon-contrast: var(--yellow);
+  background: var(--green);
+  color: var(--green-ink);
+  --icon-contrast: var(--green);
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Rings must live inside the border-box — CSS outline is not tappable,
-     which made part of the button look active but do nothing. */
   outline: none;
-  border: 0.22em solid var(--yellow-deep);
-  box-shadow: inset 0 0 0 0.22em #111, 0 0.35em 1em rgb(0 0 0 / 55%);
+  border: 0.22em solid rgba(6, 35, 26, 0.35);
+  box-shadow: 0 0 0 0 var(--green-glow), 0 8px 32px rgba(92, 221, 173, 0.2);
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   flex-shrink: 0;
@@ -270,6 +414,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
+  animation: pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .capture-fab.floating:active { transform: translateX(-50%) scale(0.94); }
@@ -281,11 +426,11 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   min-height: 0;
   overflow-y: auto;
   display: grid;
-  /* two columns on a small portrait panel, five-ish on 1024x600 */
   grid-template-columns: repeat(auto-fill, minmax(min(9.5rem, 45%), 1fr));
   gap: 0.6rem;
   padding: 0.8rem;
   align-content: start;
+  background: var(--bg);
 }
 
 .booth-gallery.empty {
@@ -297,9 +442,9 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .booth-gallery figure {
   position: relative;
-  border-radius: 0.4rem;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
 }
 
 .booth-gallery img {
@@ -315,17 +460,16 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   bottom: 0;
   padding: 0.1em 0.45em;
   font-size: clamp(0.65rem, 1.4vw, 0.85rem);
-  background: rgb(0 0 0 / 60%);
+  background: rgb(12 10 18 / 70%);
 }
 
 .booth-nav {
   flex: 0 0 auto;
   display: flex;
-  border-top: 1px solid var(--border);
-  background: var(--panel);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
   position: relative;
   z-index: 6;
-  /* Extra tap height so a slightly-high hit still finds the nav. */
   min-height: 3.6rem;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
@@ -342,12 +486,16 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   border: 0;
   background: transparent;
   font-size: clamp(0.6rem, 3.2vw, 0.85rem);
-  color: var(--muted);
-  --icon-contrast: var(--panel);
+  font-weight: 700;
+  color: var(--text-dim);
+  --icon-contrast: var(--surface);
   touch-action: manipulation;
 }
 
-.booth-nav button.active { color: var(--yellow); --icon-contrast: var(--panel); }
+.booth-nav button.active {
+  color: var(--green);
+  --icon-contrast: var(--surface);
+}
 
 /* status sheet behind the gear icon */
 
@@ -355,26 +503,33 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   position: absolute;
   inset: 0;
   z-index: 10;
-  background: rgb(0 0 0 / 60%);
+  background: rgb(12 10 18 / 70%);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .status-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 0.6rem;
-  padding: 1em 1.4em;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 1.2em 1.6em;
   display: flex;
   flex-direction: column;
   gap: 0.5em;
   font-size: clamp(0.7rem, 4vw, 1rem);
+  min-width: min(18rem, 80vw);
 }
 
-.status-card h3 { color: var(--yellow); }
+.status-card h3 {
+  color: var(--purple-lt);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+}
 
-/* ---------- booth takeover (countdown / review / saved) ---------- */
+/* ---------- booth takeover (countdown / review / saved / error) ---------- */
 
 .booth-takeover {
   position: relative;
@@ -384,7 +539,21 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #000;
+  background: var(--bg);
+}
+
+.booth-takeover.done-glow {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, var(--green-glow) 0%, transparent 55%),
+    var(--bg);
+}
+
+.booth-takeover.error-screen {
+  background: radial-gradient(ellipse 120% 80% at 50% -5%, var(--purple-wash) 0%, var(--bg) 55%);
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 2rem;
+  text-align: center;
 }
 
 .stage {
@@ -399,92 +568,184 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .overlay { position: absolute; z-index: 2; }
 
-.countdown {
+.countdown-wrap {
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(6rem, 55vh, 24rem);
-  font-weight: 900;
-  color: var(--yellow);
-  text-shadow: 0 0.04em 0 rgb(0 0 0 / 60%);
-  background: rgb(0 0 0 / 30%);
-  animation: shrink 1s ease-in forwards;
+  background: rgb(12 10 18 / 35%);
 }
 
-@keyframes shrink {
-  from { transform: scale(1.25); opacity: 1; }
-  to { transform: scale(0.9); opacity: 0.6; }
+.countdown-ring {
+  position: relative;
+  width: min(55vmin, 22rem);
+  height: min(55vmin, 22rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.countdown-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.countdown-ring .ring-track {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 6;
+}
+
+.countdown-ring .ring-fill {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.9s linear;
+}
+
+.countdown-num {
+  font-size: clamp(120px, 28vmin, 280px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1;
+  text-shadow: 0 0.04em 0.2em rgb(0 0 0 / 55%);
+}
+
+.capturing-overlay {
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  background: rgb(12 10 18 / 45%);
+  text-align: center;
+  padding: 2rem;
+}
+
+.capturing-overlay h2 {
+  font-size: clamp(22px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.capturing-overlay p {
+  color: var(--text-dim);
+  font-size: clamp(16px, 2vw, 20px);
+  font-weight: 400;
+}
+
+.spinner {
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 50%;
+  border: 3px solid var(--line-strong);
+  border-top-color: var(--green);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .flash {
   inset: 0;
   background: #fff;
   animation: flashfade 0.9s ease-out forwards;
+  pointer-events: none;
 }
 
 @keyframes flashfade {
-  from { opacity: 1; }
-  to { opacity: 0.15; }
+  from { opacity: 0.85; }
+  to { opacity: 0; }
+}
+
+.review-panel {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 1.5rem 6%;
+  background: linear-gradient(transparent, rgb(12 10 18 / 85%) 35%);
+  text-align: center;
+}
+
+.review-panel h2 {
+  font-size: clamp(22px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.done-panel {
   position: absolute;
   z-index: 2;
-  bottom: 4%;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
-  gap: 6vw;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem 1.5rem 8%;
+  background: linear-gradient(transparent, rgb(12 10 18 / 80%) 40%);
+  text-align: center;
 }
 
-.btn {
-  border-radius: 0.55em;
+.done-panel h2 {
+  font-size: clamp(22px, 4vw, 36px);
   font-weight: 800;
-  padding: 0.6em 1.1em;
-  font-size: clamp(0.9rem, 5.5vw, 1.5rem);
-  box-shadow: 0 0.25em 0.6em rgb(0 0 0 / 50%);
+  letter-spacing: -0.02em;
 }
 
-.btn:active { transform: translateY(0.12em); }
-
-.btn.accept { background: var(--yellow); color: #111; }
-
-.btn.retake {
-  background: var(--card);
-  color: var(--text);
-  border: 1px solid var(--border);
+.done-panel p {
+  color: var(--text-dim);
+  font-size: clamp(16px, 2vw, 20px);
 }
 
-.saved-banner {
-  bottom: 8%;
-  background: var(--yellow);
-  color: #111;
-  font-size: clamp(0.9rem, 5vw, 1.5rem);
+.error-screen .error-glyph {
+  font-size: clamp(2.5rem, 8vw, 4rem);
+  line-height: 1;
+}
+
+.error-screen h2 {
+  font-size: clamp(22px, 4vw, 36px);
   font-weight: 800;
-  padding: 0.6em 1.2em;
-  border-radius: 0.55em;
-  animation: rise 0.4s ease-out;
+  letter-spacing: -0.02em;
 }
 
-@keyframes rise {
-  from { transform: translateY(1em); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+.error-screen p {
+  color: var(--text-dim);
+  font-size: clamp(16px, 2vw, 20px);
+  max-width: 28rem;
 }
 
 .error-banner {
-  background: var(--red);
-  color: #fff;
-  padding: 0.5em 0.8em;
-  border-radius: 0.45em;
-  font-size: clamp(0.6rem, 3.5vw, 0.95rem);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  padding: 0.55em 0.9em;
+  border-radius: var(--radius-sm);
+  font-size: clamp(0.7rem, 3.5vw, 0.95rem);
   text-align: center;
   flex: 0 0 auto;
-}
-
-.booth-takeover .error-banner {
-  position: absolute;
-  z-index: 2;
-  top: 4%;
-  max-width: 92%;
 }
 
 /* ---------- wall gallery ---------- */
@@ -502,8 +763,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   gap: 1.2rem;
   padding: 1.1rem 2rem;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
 .wall-logo {
@@ -512,23 +773,27 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   justify-content: center;
   width: 3.4rem;
   aspect-ratio: 1;
-  border-radius: 0.8rem;
-  background: var(--yellow);
-  color: #111;
-  --icon-contrast: var(--yellow);
+  border-radius: var(--radius-sm);
+  background: var(--green);
+  color: var(--green-ink);
+  --icon-contrast: var(--green);
   font-size: 1.5rem;
 }
 
 .wall-title { flex: 1; }
 
 .wall-title h1 {
-  color: var(--yellow);
+  color: var(--text);
   font-size: clamp(1.3rem, 2.6vw, 2.1rem);
   font-weight: 800;
+  letter-spacing: -0.02em;
   line-height: 1.1;
 }
 
-.wall-title p { font-size: clamp(0.85rem, 1.5vw, 1.15rem); }
+.wall-title p {
+  font-size: clamp(0.85rem, 1.5vw, 1.15rem);
+  color: var(--text-dim);
+}
 
 .wall-meta { display: flex; align-items: center; gap: 1.4rem; }
 
@@ -537,7 +802,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   gap: 0.7rem;
   color: var(--text);
-  --icon-contrast: var(--panel);
+  --icon-contrast: var(--surface);
 }
 
 .wall-stat > div { display: flex; flex-direction: column; line-height: 1.25; }
@@ -546,7 +811,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .wall-stat span { color: var(--muted); font-size: clamp(0.7rem, 1.2vw, 0.9rem); }
 
-.wall-divider { width: 1px; height: 2.4rem; background: var(--border); }
+.wall-divider { width: 1px; height: 2.4rem; background: var(--line-strong); }
 
 .wall-body {
   flex: 1;
@@ -554,12 +819,14 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: flex;
   flex-direction: column;
   padding: 1.3rem 2rem 1rem;
+  background: radial-gradient(ellipse 100% 60% at 50% -10%, var(--purple-wash) 0%, var(--bg) 50%);
 }
 
 .section-title {
   flex: 0 0 auto;
   font-size: clamp(1.05rem, 2vw, 1.5rem);
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   padding-bottom: 0.45rem;
   margin-bottom: 1rem;
   position: relative;
@@ -573,7 +840,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   width: 4.5rem;
   height: 0.22rem;
   border-radius: 0.2rem;
-  background: var(--yellow);
+  background: var(--purple-lt);
 }
 
 .gallery-empty {
@@ -598,8 +865,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .card {
   position: relative;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -617,19 +884,19 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   padding: 0.15em 0.6em;
   font-size: clamp(0.75rem, 1.2vw, 0.95rem);
   font-weight: 600;
-  background: rgb(0 0 0 / 62%);
+  background: rgb(12 10 18 / 70%);
   border-top-right-radius: 0.35rem;
 }
 
-.card.newest { border: 2px solid var(--yellow); }
+.card.newest { border: 2px solid var(--purple-lt); }
 
 .new-badge {
   position: absolute;
   z-index: 2;
   top: 0;
   left: 0;
-  background: var(--yellow);
-  color: #111;
+  background: var(--purple-lt);
+  color: #1a0f2e;
   font-size: clamp(0.7rem, 1.1vw, 0.9rem);
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -643,8 +910,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   justify-content: space-between;
   padding: 0.65rem 2rem;
-  background: var(--panel);
-  border-top: 1px solid var(--border);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
   font-size: clamp(0.8rem, 1.3vw, 1rem);
 }
 
@@ -657,7 +924,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   gap: 0.45em;
   color: var(--muted);
-  --icon-contrast: var(--panel);
+  --icon-contrast: var(--surface);
+  text-decoration: none;
 }
 
 /* ---------- admin ---------- */
@@ -675,13 +943,19 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   gap: 1rem;
   padding: 0.9rem 1.5rem;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
-.admin-header h1 { flex: 1; font-size: 1.3rem; color: var(--yellow); }
+.admin-header h1 {
+  flex: 1;
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
 
-.admin-header h1 span { color: var(--text); font-weight: 500; }
+.admin-header h1 span { color: var(--text-dim); font-weight: 500; }
 
 .admin-header-actions { display: flex; gap: 0.5rem; }
 
@@ -689,18 +963,21 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: flex;
   gap: 0.25rem;
   padding: 0.6rem 1.5rem 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
 }
 
 .admin-tabs button {
   padding: 0.5em 1em;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 700;
   border-bottom: 3px solid transparent;
 }
 
-.admin-tabs button.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+.admin-tabs button.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+}
 
 .admin-body { flex: 1; padding: 1.2rem 1.5rem; }
 
@@ -708,41 +985,47 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   padding: 0.6rem 1.5rem;
   color: var(--muted);
   font-size: 0.85rem;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
 }
 
 .admin-panel { display: flex; flex-direction: column; gap: 1rem; max-width: 60rem; }
 
-.admin-panel h3 { margin-top: 0.5rem; font-size: 1rem; }
+.admin-panel h3 { margin-top: 0.5rem; font-size: 1rem; font-weight: 800; }
 
 .admin-btn {
   align-self: flex-start;
-  background: var(--yellow);
-  color: #111;
-  font-weight: 700;
-  padding: 0.55em 1.1em;
-  border-radius: 0.45em;
+  background: var(--green);
+  color: var(--green-ink);
+  font-weight: 800;
+  padding: 0.6em 1.2em;
+  border-radius: 999px;
+  letter-spacing: -0.01em;
 }
 
 .admin-btn:disabled { opacity: 0.5; cursor: default; }
 
 .admin-btn.ghost {
-  background: var(--card);
+  background: transparent;
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--line-strong);
 }
 
 .admin-error {
-  color: var(--red);
+  color: var(--text);
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
 }
+
+.admin-error::before { content: "⚠️"; }
 
 .admin-note {
   background: var(--card);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--yellow);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--purple-lt);
   padding: 0.5em 0.9em;
-  border-radius: 0.35em;
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
 }
 
@@ -750,6 +1033,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   align-items: center;
   justify-content: center;
   display: flex;
+  background: radial-gradient(ellipse 120% 80% at 50% -5%, var(--purple-wash) 0%, var(--bg) 55%);
 }
 
 .login-card {
@@ -757,29 +1041,33 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   flex-direction: column;
   align-items: center;
   gap: 0.9rem;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
   padding: 2rem 2.5rem;
   width: min(20rem, 90vw);
 }
 
-.login-card h1 { font-size: 1.2rem; }
+.login-card h1 {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
 
 .login-card .login-exit { align-self: stretch; text-align: center; }
 
 .admin input, .admin select {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line-strong);
   color: var(--text);
-  border-radius: 0.4em;
+  border-radius: var(--radius-sm);
   padding: 0.5em 0.7em;
   font: inherit;
   width: 100%;
 }
 
 .admin input:focus, .admin select:focus {
-  outline: 2px solid var(--yellow);
+  outline: 2px solid var(--green);
   border-color: transparent;
 }
 
@@ -807,24 +1095,30 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .diag-card {
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   padding: 0.8rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 
-.diag-card h4 { color: var(--yellow); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.diag-card h4 {
+  color: var(--purple-lt);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
 
 .meter {
   height: 0.45rem;
   border-radius: 0.3rem;
-  background: var(--border);
+  background: var(--line);
   overflow: hidden;
 }
 
-.meter span { display: block; height: 100%; background: var(--yellow); }
+.meter span { display: block; height: 100%; background: var(--green); }
 
 .admin-photos {
   display: grid;
@@ -844,9 +1138,13 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 
 .admin-photos .card figcaption button {
-  color: var(--red);
+  color: var(--text-dim);
   font-weight: 700;
   padding: 0 0.3em;
+}
+
+.admin-photos .card figcaption button:hover {
+  color: var(--text);
 }
 
 .admin-table {
@@ -858,15 +1156,15 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .admin-table th, .admin-table td {
   text-align: left;
   padding: 0.5em 0.8em;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
 }
 
 .admin-table th { color: var(--muted); font-weight: 600; }
 
 .log-view {
   background: #000;
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   padding: 0.8rem 1rem;
   font-family: ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
   font-size: 0.75rem;
@@ -906,7 +1204,6 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .slide.over { animation-fill-mode: both; }
 
-/* Alternating Ken Burns drifts, each paired with a 1s crossfade-in */
 .slide.kb-a { animation: fadein 1s ease-out, kburns-a 14s ease-in-out both; }
 .slide.kb-b { animation: fadein 1s ease-out, kburns-b 14s ease-in-out both; }
 
@@ -943,11 +1240,12 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .slide-title { letter-spacing: 0.06em; }
 
 .slide-counter {
-  background: var(--yellow);
-  color: #111;
+  background: var(--purple-lt);
+  color: #1a0f2e;
   padding: 0.25em 0.7em;
-  border-radius: 0.45em;
+  border-radius: 999px;
   text-shadow: none;
+  font-weight: 800;
 }
 
 .slide-progress {
@@ -956,7 +1254,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   top: 0;
   left: 0;
   height: 0.3rem;
-  background: var(--yellow);
+  background: var(--green);
   animation-name: progress;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
@@ -981,15 +1279,15 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 .new-banner {
   margin-top: 8vh;
-  background: var(--yellow);
-  border: 0.18rem solid #111;
-  color: #111;
+  background: var(--purple-lt);
+  border: 0.18rem solid #1a0f2e;
+  color: #1a0f2e;
   font-size: clamp(1.4rem, 4vw, 3rem);
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 0.4em 1em;
-  border-radius: 0.5em;
+  border-radius: var(--radius-sm);
   box-shadow: 0 0.3em 1em rgb(0 0 0 / 55%);
   animation: banner-drop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
 }
@@ -999,7 +1297,6 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
-/* brick confetti: ten little bricks flung from the top center */
 .burst { position: absolute; inset: 0; }
 
 .burst span {
@@ -1010,15 +1307,15 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   height: 0.9rem;
   border-radius: 0.15rem;
   animation: fling 1.6s ease-out calc(var(--i) * 0.06s) both;
-  /* fan the bricks out using their index */
   --dx: calc((var(--i) - 4.5) * 9vw);
   --rot: calc((var(--i) - 4.5) * 160deg);
 }
 
-.burst span:nth-child(4n + 1) { background: #d01012; }
-.burst span:nth-child(4n + 2) { background: var(--yellow); }
-.burst span:nth-child(4n + 3) { background: #0057a6; }
-.burst span:nth-child(4n + 4) { background: #00852b; }
+/* Decorative confetti — purple/violet tones only (no green, no red) */
+.burst span:nth-child(4n + 1) { background: #bd8dff; }
+.burst span:nth-child(4n + 2) { background: #7b5cff; }
+.burst span:nth-child(4n + 3) { background: #32165d; }
+.burst span:nth-child(4n + 4) { background: #ece9f3; }
 
 @keyframes fling {
   from {

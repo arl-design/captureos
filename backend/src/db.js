@@ -47,7 +47,7 @@ const DEFAULT_SETTINGS = {
   jpeg_quality: 92,
   max_width: 2028,
   thumb_width: 480,
-  gallery_title: 'LEGO MiniFigure Booth',
+  gallery_title: 'Minifigure Booth',
   slideshow_interval_seconds: 6,
   gallery_mode: 'grid',
 };
