@@ -1,6 +1,6 @@
 export const APP_NAME = 'CaptureOS';
-export const APP_TAGLINE = 'LEGO MiniFigure Booth';
-export const APP_VERSION = 'captureOS v0.1.0-prototype';
+export const APP_TAGLINE = 'Minifigure Booth';
+export const APP_VERSION = 'captureOS v2.0.0';
 
 /** "1:42 PM" */
 export function formatTime(iso: string | Date): string {

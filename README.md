@@ -2,8 +2,9 @@
 
 A modular, kiosk-oriented photo-booth platform for a Raspberry Pi with a
 touchscreen and an external gallery display. The reference application is a
-**LEGO MiniFigure Photo Booth**: tap to capture on the touch panel, accept or
-retake, and the accepted photo appears on the wall display within a second.
+**Minifigure Photo Booth** (NMI design language): tap Start on the touch panel,
+accept or retake, and the accepted photo appears on the wall display within a
+second. See [`docs/V2_DPR.md`](docs/V2_DPR.md) for the v2 design refresh.
 
 Boots into a polished touch UI, captures high-quality photos, and publishes
 them to a live gallery with no operator intervention. See

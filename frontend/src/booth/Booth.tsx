@@ -5,15 +5,16 @@ import { api, subscribe } from '../lib/api';
 import { APP_NAME, APP_TAGLINE, APP_VERSION, formatTime } from '../lib/meta';
 import type { Photo, Settings } from '../lib/types';
 
-// Capture workflow per the capture workflow:
+// Capture workflow:
 //   ready -> countdown -> capturing -> review -> (accept | retake)
-type Phase = 'ready' | 'countdown' | 'capturing' | 'review' | 'saved';
+//                              ↘ saved → ready
+//   any failure -> error → ready
+type Phase = 'ready' | 'countdown' | 'capturing' | 'review' | 'saved' | 'error';
 type Tab = 'home' | 'preview' | 'gallery';
 
-// Live MJPEG preview. Chromium does not reliably abort a multipart-stream
-// <img> connection when the element unmounts, so leaked streams pile up
-// against the per-host connection limit until API calls hang. Clearing
-// src on unmount forces the abort.
+const RING_R = 54;
+const RING_C = 2 * Math.PI * RING_R;
+
 function CaptureButton({
   className,
   onCapture,
@@ -39,7 +40,7 @@ function CaptureButton({
       className={className}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      aria-label="Capture"
+      aria-label="Start capture"
     >
       <CameraIcon size="55%" />
     </button>
@@ -48,9 +49,6 @@ function CaptureButton({
 
 function PreviewStream({ className }: { className?: string }) {
   const ref = useRef<HTMLImageElement>(null);
-  // src is managed entirely by the effect (not JSX) so that the stream
-  // restarts after StrictMode's mount/unmount/mount cycle, which reuses
-  // the same DOM element.
   useEffect(() => {
     const img = ref.current;
     if (img) img.src = api.previewUrl;
@@ -61,8 +59,6 @@ function PreviewStream({ className }: { className?: string }) {
   return <img ref={ref} className={className} alt="Live preview" />;
 }
 
-// Live preview with tap-to-focus: tapping tells the camera to autofocus
-// on that spot (shown with a brief yellow ring).
 function TapFocusPreview({
   variant,
 }: {
@@ -99,8 +95,6 @@ function TapFocusPreview({
     if (rect.width === 0 || rect.height === 0) return;
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
-    // The stream renders with object-fit: cover — undo the crop so the
-    // tap maps to the actual camera frame coordinates.
     const nw = img.naturalWidth || 640;
     const nh = img.naturalHeight || 480;
     const scale = Math.max(rect.width / nw, rect.height / nh);
@@ -113,8 +107,6 @@ function TapFocusPreview({
     api
       .focus(x, y)
       .then((r) => {
-        // Fixed-focus modules (e.g. Camera Module V2 / IMX219) cannot
-        // refocus in software — focus is set by turning the lens ring.
         if (r.af_supported === false) {
           setNotice('Fixed-focus camera — turn the lens ring to adjust focus');
         }
@@ -144,10 +136,34 @@ function TapFocusPreview({
   );
 }
 
+function CountdownRing({ count, total }: { count: number; total: number }) {
+  const progress = total <= 0 ? 0 : Math.max(0, count / total);
+  const offset = RING_C * (1 - progress);
+  return (
+    <div className="overlay countdown-wrap">
+      <div className="countdown-ring">
+        <svg viewBox="0 0 120 120" aria-hidden>
+          <circle className="ring-track" cx="60" cy="60" r={RING_R} />
+          <circle
+            className="ring-fill"
+            cx="60"
+            cy="60"
+            r={RING_R}
+            strokeDasharray={RING_C}
+            strokeDashoffset={offset}
+          />
+        </svg>
+        <span className="countdown-num" key={count}>{count}</span>
+      </div>
+    </div>
+  );
+}
+
 export function Booth() {
   const [tab, setTab] = useState<Tab>('home');
   const [phase, setPhase] = useState<Phase>('ready');
   const [count, setCount] = useState(3);
+  const [countdownTotal, setCountdownTotal] = useState(3);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cameraOk, setCameraOk] = useState<boolean | null>(null);
@@ -158,7 +174,6 @@ export function Booth() {
     api.settings().then((s) => (settings.current = s)).catch(() => {});
   }, []);
 
-  // Camera status dot: poll /health.
   useEffect(() => {
     let cancelled = false;
     const check = () =>
@@ -176,7 +191,7 @@ export function Booth() {
 
   const fail = useCallback((err: unknown) => {
     setError(err instanceof Error ? err.message : String(err));
-    setPhase('ready');
+    setPhase('error');
   }, []);
 
   const doCapture = useCallback(() => {
@@ -190,7 +205,6 @@ export function Booth() {
       .catch(fail);
   }, [fail]);
 
-  // Countdown ticker (3 — 2 — 1 — shoot).
   useEffect(() => {
     if (phase !== 'countdown') return;
     if (count <= 0) {
@@ -201,7 +215,6 @@ export function Booth() {
     return () => clearTimeout(timer);
   }, [phase, count, doCapture]);
 
-  // After a successful save, linger briefly then return to ready.
   useEffect(() => {
     if (phase !== 'saved') return;
     const timer = setTimeout(() => {
@@ -213,7 +226,9 @@ export function Booth() {
 
   const startCountdown = useCallback(() => {
     setError(null);
-    setCount(settings.current?.countdown_seconds ?? 3);
+    const total = settings.current?.countdown_seconds ?? 3;
+    setCountdownTotal(total);
+    setCount(total);
     setPhase('countdown');
   }, []);
 
@@ -231,28 +246,65 @@ export function Booth() {
     setPhase('ready');
   };
 
-  // Countdown / flash / review / saved take over the whole screen.
+  const clearError = () => {
+    setError(null);
+    setPhoto(null);
+    setPhase('ready');
+  };
+
+  if (phase === 'error') {
+    return (
+      <div className="booth-takeover error-screen screen on">
+        <div className="error-glyph" aria-hidden>⚠️</div>
+        <h2>Oops</h2>
+        <p>{error || 'Something went wrong. Please try again.'}</p>
+        <button type="button" className="btn btn-primary" onClick={clearError}>
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   if (phase !== 'ready') {
     return (
-      <div className="booth-takeover">
+      <div className={`booth-takeover${phase === 'saved' ? ' done-glow' : ''} screen on`}>
         {(phase === 'countdown' || phase === 'capturing') && (
           <PreviewStream className="stage" />
         )}
         {phase === 'countdown' && (
-          <div className="overlay countdown" key={count}>{count}</div>
+          <CountdownRing count={count} total={countdownTotal} />
         )}
-        {phase === 'capturing' && <div className="overlay flash" />}
+        {phase === 'capturing' && (
+          <>
+            <div className="overlay flash" />
+            <div className="overlay capturing-overlay">
+              <div className="spinner" aria-hidden />
+              <h2>Capturing...</h2>
+              <p>Hold still and keep smiling!</p>
+            </div>
+          </>
+        )}
         {(phase === 'review' || phase === 'saved') && photo && (
           <img className="stage contain" src={photo.url} alt="Your capture" />
         )}
         {phase === 'review' && (
-          <div className="review-actions">
-            <button className="btn accept" onClick={accept}>Accept ✓</button>
-            <button className="btn retake" onClick={retake}>Retake ↻</button>
+          <div className="review-panel">
+            <h2>Looking good!</h2>
+            <div className="review-actions">
+              <button type="button" className="btn btn-primary" onClick={accept}>
+                Use This Photo
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={retake}>
+                Retake
+              </button>
+            </div>
           </div>
         )}
         {phase === 'saved' && (
-          <div className="overlay saved-banner">Added to the gallery!</div>
+          <div className="done-panel">
+            <h2>You&apos;re in the gallery!</h2>
+            <p>Your minifig just hit the wall.</p>
+          </div>
         )}
       </div>
     );
@@ -272,10 +324,13 @@ export function Booth() {
       </header>
 
       {tab === 'home' && (
-        <main className="booth-home">
+        <main className="booth-home screen on">
           <div className="booth-heading">
-            <h1>{APP_TAGLINE}</h1>
-            <p>Build. Pose. Capture!</p>
+            <span className="booth-eyebrow">{APP_TAGLINE}</span>
+            <h1>
+              Become a <span className="accent">minifig</span>
+            </h1>
+            <p>Pose up and tap Start when you&apos;re ready.</p>
           </div>
           <div className="preview-card">
             <TapFocusPreview variant="card" />
@@ -286,10 +341,13 @@ export function Booth() {
           </div>
           {error && <div className="error-banner">{error}</div>}
           <div className="capture-zone">
-            <CaptureButton
-              className="capture-fab capture-fab-inline"
-              onCapture={startCountdown}
-            />
+            <button
+              type="button"
+              className="btn btn-primary pulse"
+              onClick={startCountdown}
+            >
+              Start
+            </button>
           </div>
         </main>
       )}
@@ -305,7 +363,7 @@ export function Booth() {
 
       {showStatus && (
         <div className="status-sheet" onClick={() => setShowStatus(false)}>
-          <div className="status-card">
+          <div className="status-card" onClick={(e) => e.stopPropagation()}>
             <h3>System</h3>
             <p>
               <span className={`dot ${cameraOk === false ? 'bad' : 'good'}`} />
@@ -334,7 +392,6 @@ export function Booth() {
   );
 }
 
-// Compact on-booth gallery: two-column grid of recent captures.
 function BoothGallery() {
   const [photos, setPhotos] = useState<Photo[]>([]);
 

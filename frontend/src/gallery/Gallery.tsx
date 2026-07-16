@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { CameraIcon, ClockIcon, GearIcon, PhotosIcon, WifiIcon } from '../components/Icons';
 import { api, subscribe } from '../lib/api';
-import { APP_NAME, APP_VERSION, formatDate, formatTime } from '../lib/meta';
+import { APP_NAME, APP_TAGLINE, APP_VERSION, formatDate, formatTime } from '../lib/meta';
 import type { Photo, Settings } from '../lib/types';
 import { Slideshow } from './Slideshow';
 
@@ -20,7 +20,7 @@ interface Props {
 // an operator can flip the wall display from any browser on the LAN.
 export function Gallery({ forceMode }: Props) {
   const [photos, setPhotos] = useState<Photo[]>([]);
-  const [title, setTitle] = useState('LEGO MiniFigure Booth');
+  const [title, setTitle] = useState(APP_TAGLINE);
   const [mode, setMode] = useState<Mode>('grid');
   const [interval, setIntervalSeconds] = useState(6);
   const [justAdded, setJustAdded] = useState<number | null>(null);
